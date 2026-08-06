@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Expense Tracker — UI preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --teal: #0f766e;
+      --teal-bright: #14b8a6;
+      --teal-deep: #115e59;
+      --coral: #ea580c;
+      --mint: #f0fdfa;
+      --mint-muted: #ccfbf1;
+      --ink: #134e4a;
+      --ink-soft: #5f7a76;
+      --card: #ffffff;
+      --border: #99f6e4;
+      --income: #059669;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "DM Sans", system-ui, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(ellipse 80% 50% at 20% 0%, #ccfbf1 0%, transparent 55%),
+        radial-gradient(ellipse 60% 40% at 100% 10%, #99f6e4 0%, transparent 45%),
+        linear-gradient(180deg, #f0fdfa 0%, #e6fffa 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 28px 16px 48px;
+    }
+    h1 {
+      font-family: "Fraunces", Georgia, serif;
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin: 0 0 6px;
+      letter-spacing: -0.02em;
+    }
+    .sub {
+      color: var(--ink-soft);
+      margin: 0 0 28px;
+      font-size: 0.95rem;
+    }
+    .phones {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 28px;
+      justify-content: center;
+      max-width: 1100px;
+    }
+    .phone {
+      width: 320px;
+      background: var(--mint);
+      border-radius: 36px;
+      border: 1px solid var(--border);
+      box-shadow: 0 24px 48px rgba(15, 118, 110, 0.12);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 640px;
+    }
+    .label {
+      text-align: center;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--teal);
+      margin-bottom: 10px;
+    }
+    .status {
+      height: 28px;
+      padding: 8px 22px 0;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--ink-soft);
+    }
+    .content {
+      flex: 1;
+      padding: 8px 18px 12px;
+      overflow: hidden;
+    }
+    .greeting { font-size: 0.85rem; color: var(--ink-soft); margin: 0; }
+    .title {
+      font-family: "Fraunces", Georgia, serif;
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin: 4px 0 16px;
+      letter-spacing: -0.02em;
+    }
+    .hero {
+      background: var(--teal);
+      color: #fff;
+      border-radius: 24px;
+      padding: 22px;
+      margin-bottom: 14px;
+    }
+    .hero .cap { font-size: 0.8rem; opacity: 0.85; margin: 0; }
+    .hero .amt {
+      font-size: 2rem;
+      font-weight: 700;
+      margin: 8px 0;
+      letter-spacing: -0.03em;
+    }
+    .hero .support { font-size: 0.85rem; opacity: 0.9; margin: 0; }
+    .row { display: flex; gap: 12px; margin-bottom: 14px; }
+    .tile {
+      flex: 1;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 14px;
+    }
+    .tile .cap { font-size: 0.75rem; color: var(--ink-soft); margin: 0 0 6px; }
+    .tile .amt { font-size: 1.15rem; font-weight: 700; margin: 0; }
+    .tile.income .amt { color: var(--income); }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+    .card h3 { margin: 0 0 12px; font-size: 0.95rem; }
+    .bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 0.82rem;
+    }
+    .bar .name { width: 78px; color: var(--ink-soft); }
+    .bar .track {
+      flex: 1;
+      height: 8px;
+      background: var(--mint-muted);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .bar .fill {
+      height: 100%;
+      background: var(--teal);
+      border-radius: 99px;
+    }
+    .bar .val { width: 56px; text-align: right; font-weight: 600; }
+    .tx {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid #e6fffa;
+    }
+    .tx:last-child { border-bottom: 0; }
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: var(--mint-muted);
+      color: var(--teal-deep);
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      font-size: 0.85rem;
+    }
+    .tx .meta { flex: 1; min-width: 0; }
+    .tx .name { font-weight: 600; margin: 0; font-size: 0.9rem; }
+    .tx .cat { margin: 2px 0 0; font-size: 0.75rem; color: var(--ink-soft); }
+    .tx .money { font-weight: 700; font-size: 0.9rem; }
+    .tx .money.out { color: var(--teal); }
+    .tx .money.in { color: var(--income); }
+    .nav {
+      display: flex;
+      border-top: 1px solid var(--border);
+      background: var(--card);
+      padding: 10px 8px 16px;
+    }
+    .nav button {
+      flex: 1;
+      border: 0;
+      background: transparent;
+      color: var(--ink-soft);
+      font: inherit;
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 8px;
+      cursor: default;
+    }
+    .nav button.active { color: var(--teal); }
+    .nav .ico { display: block; font-size: 1.1rem; margin-bottom: 2px; }
+    .setting {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 0;
+      border-bottom: 1px solid #e6fffa;
+      font-size: 0.9rem;
+    }
+    .setting:last-child { border-bottom: 0; }
+    .chip {
+      background: var(--mint-muted);
+      color: var(--teal-deep);
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 99px;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      margin-top: 8px;
+      padding: 12px;
+      border: 0;
+      border-radius: 14px;
+      background: var(--teal);
+      color: #fff;
+      font: inherit;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .btn.secondary {
+      background: var(--card);
+      color: var(--teal);
+      border: 1px solid var(--border);
+      margin-top: 10px;
+    }
+    .note {
+      margin-top: 32px;
+      max-width: 640px;
+      text-align: center;
+      color: var(--ink-soft);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <h1>Expense Tracker</h1>
+  <p class="sub">Local UI preview (Axio-inspired) — not the live Android app</p>
+
+  <div class="phones">
+    <div>
+      <div class="label">Spends</div>
+      <div class="phone">
+        <div class="status">9:41</div>
+        <div class="content">
+          <p class="greeting">Good morning</p>
+          <h2 class="title">Spends</h2>
+          <div class="hero">
+            <p class="cap">Spent this month</p>
+            <p class="amt">₹24,680</p>
+            <p class="support">Income ₹52,000 · Net ₹27,320</p>
+          </div>
+          <div class="row">
+            <div class="tile">
+              <p class="cap">Today</p>
+              <p class="amt">₹1,240</p>
+            </div>
+            <div class="tile income">
+              <p class="cap">Income</p>
+              <p class="amt">₹52,000</p>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Where money went</h3>
+            <div class="bar"><span class="name">Food</span><div class="track"><div class="fill" style="width:72%"></div></div><span class="val">₹8,420</span></div>
+            <div class="bar"><span class="name">Groceries</span><div class="track"><div class="fill" style="width:48%"></div></div><span class="val">₹5,610</span></div>
+            <div class="bar"><span class="name">Travel</span><div class="track"><div class="fill" style="width:28%"></div></div><span class="val">₹3,200</span></div>
+          </div>
+        </div>
+        <div class="nav">
+          <button class="active"><span class="ico">⌂</span>Spends</button>
+          <button><span class="ico">☰</span>Activity</button>
+          <button><span class="ico">⚙</span>More</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="label">Activity</div>
+      <div class="phone">
+        <div class="status">9:41</div>
+        <div class="content">
+          <p class="greeting">All SMS money moves</p>
+          <h2 class="title">Activity</h2>
+          <div class="card" style="padding-top:6px;padding-bottom:6px">
+            <div class="tx">
+              <div class="avatar">Z</div>
+              <div class="meta"><p class="name">Zepto</p><p class="cat">Groceries · Today</p></div>
+              <div class="money out">−₹486</div>
+            </div>
+            <div class="tx">
+              <div class="avatar">G</div>
+              <div class="meta"><p class="name">Groww</p><p class="cat">Investment · Yesterday</p></div>
+              <div class="money out">−₹5,000</div>
+            </div>
+            <div class="tx">
+              <div class="avatar">S</div>
+              <div class="meta"><p class="name">Salary</p><p class="cat">Income · 1 Aug</p></div>
+              <div class="money in">+₹52,000</div>
+            </div>
+            <div class="tx">
+              <div class="avatar">I</div>
+              <div class="meta"><p class="name">Instamart</p><p class="cat">Groceries · 31 Jul</p></div>
+              <div class="money out">−₹312</div>
+            </div>
+            <div class="tx">
+              <div class="avatar">U</div>
+              <div class="meta"><p class="name">Uber</p><p class="cat">Travel · 30 Jul</p></div>
+              <div class="money out">−₹245</div>
+            </div>
+          </div>
+        </div>
+        <div class="nav">
+          <button><span class="ico">⌂</span>Spends</button>
+          <button class="active"><span class="ico">☰</span>Activity</button>
+          <button><span class="ico">⚙</span>More</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="label">More</div>
+      <div class="phone">
+        <div class="status">9:41</div>
+        <div class="content">
+          <p class="greeting">Backup &amp; SMS</p>
+          <h2 class="title">More</h2>
+          <div class="card">
+            <div class="setting"><span>SMS permission</span><span class="chip">Granted</span></div>
+            <div class="setting"><span>Inbox lookback</span><span class="chip">90 days</span></div>
+            <button class="btn">Rescan SMS inbox</button>
+            <button class="btn secondary">Remove spam entries</button>
+            <button class="btn secondary">Backup to Drive file</button>
+            <button class="btn secondary">Restore from file</button>
+          </div>
+        </div>
+        <div class="nav">
+          <button><span class="ico">⌂</span>Spends</button>
+          <button><span class="ico">☰</span>Activity</button>
+          <button class="active"><span class="ico">⚙</span>More</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="note">
+    This is a static mock of the Compose screens. The real app runs on Android (no emulator on this Mac).
+    Install <code>releases/app-debug.apk</code> on your phone after the GitHub push.
+  </p>
+</body>
+</html>

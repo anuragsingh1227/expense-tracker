@@ -1,0 +1,162 @@
+package com.expensetracker.sms.parser
+
+import com.expensetracker.domain.model.PaymentMode
+import com.expensetracker.domain.model.TransactionType
+import com.google.common.truth.Truth.assertThat
+import org.junit.Test
+import java.math.BigDecimal
+import java.time.Instant
+
+class SmsParserTest {
+
+    private val parser = SmsParser()
+    private val now = Instant.parse("2024-01-12T10:15:00Z")
+
+    private fun raw(sender: String, body: String) = RawSms(sender, body, now)
+
+    @Test
+    fun `HDFC debit is parsed with amount, merchant, category, mode`() {
+        val tx = parser.parse(raw("VM-HDFCBK", SampleSms.HDFC_DEBIT))!!
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("245.00"))
+        assertThat(tx.type).isEqualTo(TransactionType.DEBIT)
+        assertThat(tx.merchant).isEqualTo("Amazon")
+        assertThat(tx.category).isEqualTo(Categories.SHOPPING)
+        assertThat(tx.paymentMode).isEqualTo(PaymentMode.UPI)
+        assertThat(tx.bank).isEqualTo("HDFC")
+        assertThat(tx.accountLast4).isEqualTo("1234")
+        assertThat(tx.referenceNumber).isEqualTo("401234567890")
+    }
+
+    @Test
+    fun `SBI credit with comma-separated balance is parsed`() {
+        val tx = parser.parse(raw("JD-SBIINB", SampleSms.SBI_CREDIT))!!
+        assertThat(tx.type).isEqualTo(TransactionType.CREDIT)
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("50000.00"))
+        assertThat(tx.bank).isEqualTo("SBI")
+        assertThat(tx.category).isEqualTo(Categories.SALARY)
+        assertThat(tx.paymentMode).isEqualTo(PaymentMode.NET_BANKING)
+    }
+
+    @Test
+    fun `ICICI UPI debit picks merchant from Info field`() {
+        val tx = parser.parse(raw("AD-ICICIB", SampleSms.ICICI_UPI_DEBIT))!!
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("499.00"))
+        assertThat(tx.merchant).isEqualTo("Swiggy")
+        assertThat(tx.category).isEqualTo(Categories.FOOD)
+        assertThat(tx.paymentMode).isEqualTo(PaymentMode.UPI)
+    }
+
+    @Test
+    fun `Axis credit card purchase extracts card last 4 and merchant`() {
+        val tx = parser.parse(raw("VM-AXISBK", SampleSms.AXIS_CARD))!!
+        assertThat(tx.cardLast4).isEqualTo("4321")
+        assertThat(tx.merchant).isEqualTo("Flipkart")
+        assertThat(tx.paymentMode).isEqualTo(PaymentMode.CARD_CREDIT)
+        assertThat(tx.type).isEqualTo(TransactionType.DEBIT)
+    }
+
+    @Test
+    fun `FASTag recharge is categorized as Transport`() {
+        val tx = parser.parse(raw("VM-KOTAKB", SampleSms.KOTAK_FASTAG))!!
+        assertThat(tx.category).isEqualTo(Categories.TRANSPORT)
+        assertThat(tx.paymentMode).isEqualTo(PaymentMode.FASTAG)
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("500.00"))
+    }
+
+    @Test
+    fun `UPI to Zomato via GPay picks correct merchant and category`() {
+        val tx = parser.parse(raw("VM-GPAY", SampleSms.UPI_TO_MERCHANT))!!
+        assertThat(tx.merchant).isEqualTo("Zomato")
+        assertThat(tx.category).isEqualTo(Categories.FOOD)
+        assertThat(tx.paymentMode).isEqualTo(PaymentMode.UPI)
+    }
+
+    @Test
+    fun `OTP SMS is rejected`() {
+        assertThat(parser.isTransactional(SampleSms.OTP_MESSAGE)).isFalse()
+    }
+
+    @Test
+    fun `Promotional SMS without amount is rejected`() {
+        assertThat(parser.isTransactional(SampleSms.PROMOTIONAL)).isFalse()
+    }
+
+    @Test
+    fun `Duplicate SMS (same sender, amount, minute, reference) has identical hash`() {
+        val a = parser.parse(raw("VM-HDFCBK", SampleSms.HDFC_DEBIT))!!
+        val b = parser.parse(raw("VM-HDFCBK", SampleSms.HDFC_DEBIT_DUP))!!
+        assertThat(a.dedupeHash).isEqualTo(b.dedupeHash)
+    }
+
+    @Test
+    fun `Different amounts produce different hashes`() {
+        val a = parser.parse(raw("VM-HDFCBK", SampleSms.HDFC_DEBIT))!!
+        val altered = SampleSms.HDFC_DEBIT.replace("245.00", "246.00")
+        val b = parser.parse(raw("VM-HDFCBK", altered))!!
+        assertThat(a.dedupeHash).isNotEqualTo(b.dedupeHash)
+    }
+
+    @Test
+    fun `Groww purchase is categorized as Investment`() {
+        val tx = parser.parse(raw("VM-HDFCBK", SampleSms.GROWW_INVESTMENT))!!
+        assertThat(tx.merchant).isEqualTo("Groww")
+        assertThat(tx.category).isEqualTo(Categories.INVESTMENT)
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("5000.00"))
+    }
+
+    @Test
+    fun `Swiggy Instamart is Groceries not Food`() {
+        val tx = parser.parse(raw("VM-ICICIB", SampleSms.INSTAMART_GROCERY))!!
+        assertThat(tx.merchant).isEqualTo("Swiggy Instamart")
+        assertThat(tx.category).isEqualTo(Categories.GROCERIES)
+    }
+
+    @Test
+    fun `Zepto quick commerce is Groceries`() {
+        val tx = parser.parse(raw("VM-GPAY", SampleSms.ZEPTO_GROCERY))!!
+        assertThat(tx.merchant).isEqualTo("Zepto")
+        assertThat(tx.category).isEqualTo(Categories.GROCERIES)
+    }
+
+    @Test
+    fun `custom merchant matcher override wins over dictionary`() {
+        val matcher = MerchantMatcher { text ->
+            if (text.uppercase().contains("SWIGGY")) {
+                MerchantDictionary.Entry("SWIGGY", "Swiggy", Categories.GROCERIES)
+            } else {
+                MerchantDictionary.match(text)
+            }
+        }
+        val tx = SmsParser(matcher).parse(raw("AD-ICICIB", SampleSms.ICICI_UPI_DEBIT))!!
+        assertThat(tx.category).isEqualTo(Categories.GROCERIES)
+    }
+
+    @Test
+    fun `cashback marketing SMS is rejected`() {
+        assertThat(parser.isTransactional(SampleSms.CASHBACK_SPAM)).isFalse()
+        assertThat(parser.parse(raw("AX-PROMO", SampleSms.CASHBACK_SPAM))).isNull()
+    }
+
+    @Test
+    fun `loan offer SMS is rejected`() {
+        assertThat(parser.isTransactional(SampleSms.LOAN_OFFER_SPAM)).isFalse()
+    }
+
+    @Test
+    fun `due date reminder is rejected`() {
+        assertThat(parser.isTransactional(SampleSms.DUE_REMINDER_SPAM)).isFalse()
+    }
+
+    @Test
+    fun `balance-only alert is rejected`() {
+        assertThat(parser.isTransactional(SampleSms.BALANCE_ONLY)).isFalse()
+    }
+
+    @Test
+    fun `amount extractor skips balance and picks debit amount`() {
+        val body =
+            "Avl Bal Rs 12,340.55. Rs 245.00 debited from a/c XXXX1234 at AMAZON via UPI. UPI Ref 401234567890"
+        val tx = parser.parse(raw("VM-HDFCBK", body))!!
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("245.00"))
+    }
+}
