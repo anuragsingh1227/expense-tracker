@@ -46,10 +46,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.expensetracker.R
+import com.expensetracker.data.db.entity.LabelRuleEntity
 import com.expensetracker.data.repository.TransactionRepository
 import com.expensetracker.domain.model.Transaction
 import com.expensetracker.domain.model.TransactionType
 import com.expensetracker.sms.parser.Categories
+import com.expensetracker.sms.parser.LabelRuleCatalog
 import com.expensetracker.sms.parser.MerchantCatalog
 import com.expensetracker.ui.components.LoadingBlock
 import com.expensetracker.ui.components.MetaRow
@@ -67,12 +69,20 @@ import javax.inject.Inject
 class TransactionDetailViewModel @Inject constructor(
     private val repository: TransactionRepository,
     private val merchantCatalog: MerchantCatalog,
+    private val labelRuleCatalog: LabelRuleCatalog,
 ) : ViewModel() {
     private val _state = MutableStateFlow<Transaction?>(null)
     val state: StateFlow<Transaction?> = _state.asStateFlow()
 
+    private val _ruleSavedMessage = MutableStateFlow<String?>(null)
+    val ruleSavedMessage: StateFlow<String?> = _ruleSavedMessage.asStateFlow()
+
     fun load(id: Long) {
         viewModelScope.launch { _state.value = repository.find(id) }
+    }
+
+    fun clearRuleMessage() {
+        _ruleSavedMessage.value = null
     }
 
     fun save(updated: Transaction, rememberForMerchant: Boolean) {
@@ -87,6 +97,67 @@ class TransactionDetailViewModel @Inject constructor(
             }
             _state.value = repository.find(updated.id)
         }
+    }
+
+    fun createLabelRule(
+        label: String,
+        useSender: Boolean,
+        senderContains: String,
+        useBody: Boolean,
+        bodyContains: String,
+        useMerchant: Boolean,
+        merchantContains: String,
+        applyToThisTransaction: Boolean,
+    ) {
+        viewModelScope.launch {
+            val current = _state.value ?: return@launch
+            val created = labelRuleCatalog.create(
+                label = label,
+                senderContains = senderContains.takeIf { useSender },
+                bodyContains = bodyContains.takeIf { useBody },
+                merchantContains = merchantContains.takeIf { useMerchant },
+            )
+            if (created == null) {
+                _ruleSavedMessage.value = "NEED_CRITERIA"
+                return@launch
+            }
+            if (applyToThisTransaction) {
+                repository.update(
+                    current.copy(
+                        category = created.label,
+                        manuallyEdited = true,
+                    ),
+                )
+                _state.value = repository.find(current.id)
+            }
+            _ruleSavedMessage.value = "OK"
+        }
+    }
+
+    fun previewMatches(
+        useSender: Boolean,
+        senderContains: String,
+        useBody: Boolean,
+        bodyContains: String,
+        useMerchant: Boolean,
+        merchantContains: String,
+    ): Boolean {
+        val current = _state.value ?: return false
+        val draft = LabelRuleEntity(
+            label = "preview",
+            senderContains = senderContains.trim().takeIf { useSender && it.isNotEmpty() }?.uppercase(),
+            bodyContains = bodyContains.trim().takeIf { useBody && it.isNotEmpty() }?.uppercase(),
+            merchantContains = merchantContains.trim().takeIf { useMerchant && it.isNotEmpty() }?.uppercase(),
+        )
+        if (draft.senderContains == null && draft.bodyContains == null && draft.merchantContains == null) {
+            return false
+        }
+        return LabelRuleCatalog.matches(
+            draft,
+            current.sender.orEmpty().uppercase(),
+            current.rawSms.orEmpty().uppercase(),
+            current.merchant.orEmpty().uppercase(),
+        )
     }
 
     fun delete(id: Long, onDone: () -> Unit) {
@@ -106,6 +177,7 @@ fun TransactionDetailScreen(
 ) {
     LaunchedEffect(transactionId) { viewModel.load(transactionId) }
     val tx: Transaction? by viewModel.state.collectAsState()
+    val ruleMessage by viewModel.ruleSavedMessage.collectAsState()
 
     Scaffold(
         topBar = {
@@ -135,9 +207,54 @@ fun TransactionDetailScreen(
             return@Scaffold
         }
 
-        var category by remember(current.id) { mutableStateOf(current.category) }
+        var category by remember(current.id, current.category) { mutableStateOf(current.category) }
         var notes by remember(current.id) { mutableStateOf(current.notes.orEmpty()) }
         var rememberMerchant by remember(current.id) { mutableStateOf(true) }
+
+        var showLabelForm by remember(current.id) { mutableStateOf(false) }
+        var labelName by remember(current.id) { mutableStateOf(current.category) }
+        var useSender by remember(current.id) { mutableStateOf(!current.sender.isNullOrBlank()) }
+        var senderContains by remember(current.id) {
+            mutableStateOf(LabelRuleCatalog.suggestSenderContains(current.sender).orEmpty())
+        }
+        var useBody by remember(current.id) { mutableStateOf(true) }
+        var bodyContains by remember(current.id) {
+            mutableStateOf(
+                LabelRuleCatalog.suggestBodyContains(
+                    current.rawSms,
+                    current.merchant,
+                    current.narration,
+                ).orEmpty(),
+            )
+        }
+        var useMerchant by remember(current.id) {
+            mutableStateOf(!current.merchant.isNullOrBlank())
+        }
+        var merchantContains by remember(current.id) {
+            mutableStateOf(current.merchant.orEmpty())
+        }
+        var applyToThis by remember(current.id) { mutableStateOf(true) }
+
+        LaunchedEffect(current.category) {
+            category = current.category
+            if (!showLabelForm) labelName = current.category
+        }
+
+        LaunchedEffect(ruleMessage) {
+            when (ruleMessage) {
+                "OK" -> {
+                    category = labelName.trim().ifEmpty { category }
+                    showLabelForm = false
+                    viewModel.clearRuleMessage()
+                }
+                "NEED_CRITERIA" -> viewModel.clearRuleMessage()
+                else -> Unit
+            }
+        }
+
+        val matchesPreview = viewModel.previewMatches(
+            useSender, senderContains, useBody, bodyContains, useMerchant, merchantContains,
+        )
         val isCredit = current.type == TransactionType.CREDIT
 
         Column(
@@ -170,6 +287,8 @@ fun TransactionDetailScreen(
             SurfaceCard {
                 MetaRow(stringResource(R.string.label_bank), current.bank ?: "—")
                 Spacer(Modifier.height(12.dp))
+                MetaRow(stringResource(R.string.label_sender), current.sender ?: "—")
+                Spacer(Modifier.height(12.dp))
                 MetaRow(stringResource(R.string.label_payment), current.paymentMode.name.replace('_', ' '))
                 Spacer(Modifier.height(12.dp))
                 MetaRow(stringResource(R.string.label_reference), current.referenceNumber ?: "—")
@@ -187,6 +306,127 @@ fun TransactionDetailScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+
+            SurfaceCard {
+                Text(
+                    stringResource(R.string.label_rule_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    stringResource(R.string.label_rule_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                if (!showLabelForm) {
+                    OutlinedButton(
+                        onClick = { showLabelForm = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Text(stringResource(R.string.label_rule_create))
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = labelName,
+                        onValueChange = { labelName = it },
+                        label = { Text(stringResource(R.string.label_rule_name)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    CriterionRow(
+                        checked = useSender,
+                        onCheckedChange = { useSender = it },
+                        label = stringResource(R.string.label_rule_match_sender),
+                        value = senderContains,
+                        onValueChange = { senderContains = it },
+                        enabled = useSender,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    CriterionRow(
+                        checked = useBody,
+                        onCheckedChange = { useBody = it },
+                        label = stringResource(R.string.label_rule_match_body),
+                        value = bodyContains,
+                        onValueChange = { bodyContains = it },
+                        enabled = useBody,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    CriterionRow(
+                        checked = useMerchant,
+                        onCheckedChange = { useMerchant = it },
+                        label = stringResource(R.string.label_rule_match_merchant),
+                        value = merchantContains,
+                        onValueChange = { merchantContains = it },
+                        enabled = useMerchant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = applyToThis,
+                            onCheckedChange = { applyToThis = it },
+                        )
+                        Text(
+                            stringResource(R.string.label_rule_apply_this),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    Text(
+                        if (matchesPreview) {
+                            stringResource(R.string.label_rule_matches_yes)
+                        } else {
+                            stringResource(R.string.label_rule_matches_no)
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (matchesPreview) {
+                            ExpenseColors.Income
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Button(
+                            onClick = {
+                                viewModel.createLabelRule(
+                                    label = labelName.trim().ifEmpty { category },
+                                    useSender = useSender,
+                                    senderContains = senderContains,
+                                    useBody = useBody,
+                                    bodyContains = bodyContains,
+                                    useMerchant = useMerchant,
+                                    merchantContains = merchantContains,
+                                    applyToThisTransaction = applyToThis,
+                                )
+                            },
+                            enabled = matchesPreview && labelName.isNotBlank(),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp),
+                            shape = RoundedCornerShape(14.dp),
+                        ) {
+                            Text(stringResource(R.string.label_rule_save))
+                        }
+                        OutlinedButton(
+                            onClick = { showLabelForm = false },
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp),
+                            shape = RoundedCornerShape(14.dp),
+                        ) {
+                            Text(stringResource(R.string.action_cancel))
+                        }
+                    }
+                }
             }
 
             Text(stringResource(R.string.label_category), style = MaterialTheme.typography.titleMedium)
@@ -265,5 +505,30 @@ fun TransactionDetailScreen(
             }
             Spacer(Modifier.height(24.dp))
         }
+    }
+}
+
+@Composable
+private fun CriterionRow(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    enabled: Boolean,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+        }
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            singleLine = true,
+        )
     }
 }

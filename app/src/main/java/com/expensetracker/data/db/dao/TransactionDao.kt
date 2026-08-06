@@ -33,6 +33,30 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions ORDER BY timestamp DESC")
     fun observeAll(): Flow<List<TransactionEntity>>
 
+    @Query(
+        """
+        SELECT * FROM transactions
+        WHERE timestamp >= :from AND timestamp < :to
+        ORDER BY timestamp DESC
+        LIMIT :limit
+        """,
+    )
+    fun observeBetween(from: Instant, to: Instant, limit: Int): Flow<List<TransactionEntity>>
+
+    @Query(
+        """
+        SELECT * FROM transactions
+        WHERE timestamp >= :from AND timestamp < :to
+          AND (:query IS NULL OR
+               merchant LIKE '%' || :query || '%' OR
+               category LIKE '%' || :query || '%' OR
+               notes LIKE '%' || :query || '%' OR
+               rawSms LIKE '%' || :query || '%')
+        ORDER BY timestamp DESC
+        """,
+    )
+    fun searchBetween(query: String?, from: Instant, to: Instant): Flow<List<TransactionEntity>>
+
     @Query("SELECT * FROM transactions ORDER BY timestamp ASC")
     suspend fun getAllOnce(): List<TransactionEntity>
 
@@ -65,6 +89,24 @@ interface TransactionDao {
     )
     fun observeCategoryTotals(from: Instant, to: Instant, limit: Int = 6): Flow<List<CategoryTotal>>
 
+    /**
+     * Category spend grouped by local calendar month (`yyyy-MM`).
+     * Aggregation stays in SQLite — no raw SMS leaves the device.
+     */
+    @Query(
+        """
+        SELECT category AS category,
+               strftime('%Y-%m', timestamp / 1000, 'unixepoch', 'localtime') AS monthKey,
+               SUM(CAST(amount AS REAL)) AS total
+        FROM transactions
+        WHERE type = 'DEBIT'
+          AND timestamp >= :from AND timestamp < :to
+          AND category NOT IN ('Transfer', 'Investment')
+        GROUP BY category, monthKey
+        """,
+    )
+    fun observeCategoryMonthTotals(from: Instant, to: Instant): Flow<List<CategoryMonthTotal>>
+
     @Query(
         """
         SELECT * FROM transactions
@@ -86,5 +128,11 @@ interface TransactionDao {
 }
 
 data class CategoryTotal(val category: String, val total: Double)
+
+data class CategoryMonthTotal(
+    val category: String,
+    val monthKey: String,
+    val total: Double,
+)
 
 data class IdRawSms(val id: Long, val rawSms: String?)

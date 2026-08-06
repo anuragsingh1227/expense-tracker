@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
@@ -33,6 +34,7 @@ import com.expensetracker.R
 import com.expensetracker.data.repository.TransactionRepository
 import com.expensetracker.domain.model.Transaction
 import com.expensetracker.ui.components.EmptyState
+import com.expensetracker.ui.components.PeriodFilterRow
 import com.expensetracker.ui.components.ScreenHeader
 import com.expensetracker.ui.components.TransactionListItem
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -40,24 +42,53 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import java.time.Clock
 import javax.inject.Inject
+
+data class ActivityUiState(
+    val period: SpendPeriod = SpendPeriod.MONTH,
+    val rangeLabel: String = "",
+    val transactions: List<Transaction> = emptyList(),
+)
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class TransactionsViewModel @Inject constructor(
     private val repository: TransactionRepository,
+    private val clock: Clock,
 ) : ViewModel() {
 
     private val queryFlow = MutableStateFlow<String?>(null)
+    private val periodFlow = MutableStateFlow(SpendPeriod.MONTH)
 
-    val transactions: StateFlow<List<Transaction>> = queryFlow
-        .flatMapLatest { repository.search(it) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val state: StateFlow<ActivityUiState> = combine(
+        queryFlow,
+        periodFlow,
+        dateBoundaryFlow(clock),
+    ) { query, period, _ -> query to period }
+        .flatMapLatest { (query, period) ->
+            val window = DashboardRanges.forPeriod(period, clock)
+            repository.searchBetween(query, window.fromInclusive, window.toExclusive)
+                .map { list ->
+                    ActivityUiState(
+                        period = period,
+                        rangeLabel = window.labelRange,
+                        transactions = list,
+                    )
+                }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ActivityUiState())
 
     fun setQuery(q: String) {
         queryFlow.value = q.takeIf { it.isNotBlank() }
+    }
+
+    fun setPeriod(period: SpendPeriod) {
+        periodFlow.value = period
     }
 }
 
@@ -67,7 +98,7 @@ fun TransactionsScreen(
     viewModel: TransactionsViewModel = hiltViewModel(),
 ) {
     var query by remember { mutableStateOf("") }
-    val list by viewModel.transactions.collectAsState()
+    val state by viewModel.state.collectAsState()
 
     Column(
         modifier = Modifier
@@ -77,9 +108,18 @@ fun TransactionsScreen(
         Spacer(Modifier.height(8.dp))
         ScreenHeader(
             title = stringResource(R.string.tab_transactions),
-            subtitle = stringResource(R.string.transactions_subtitle),
+            subtitle = if (state.rangeLabel.isNotBlank()) {
+                state.rangeLabel
+            } else {
+                stringResource(R.string.transactions_subtitle)
+            },
         )
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(14.dp))
+        PeriodFilterRow(
+            selected = state.period,
+            onSelect = viewModel::setPeriod,
+        )
+        Spacer(Modifier.height(14.dp))
         OutlinedTextField(
             value = query,
             onValueChange = {
@@ -96,7 +136,7 @@ fun TransactionsScreen(
                 )
             },
             modifier = Modifier.fillMaxWidth(),
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+            shape = RoundedCornerShape(14.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = MaterialTheme.colorScheme.surface,
                 unfocusedContainerColor = MaterialTheme.colorScheme.surface,
@@ -104,23 +144,23 @@ fun TransactionsScreen(
         )
         Spacer(Modifier.height(16.dp))
         when {
-            list.isEmpty() && query.isNotBlank() -> {
+            state.transactions.isEmpty() && query.isNotBlank() -> {
                 EmptyState(
                     icon = Icons.Outlined.SearchOff,
                     title = stringResource(R.string.search_empty_title),
                     body = stringResource(R.string.search_empty_body),
                 )
             }
-            list.isEmpty() -> {
+            state.transactions.isEmpty() -> {
                 EmptyState(
                     icon = Icons.Outlined.SearchOff,
                     title = stringResource(R.string.empty_transactions_title),
-                    body = stringResource(R.string.empty_transactions),
+                    body = stringResource(R.string.empty_period_transactions),
                 )
             }
             else -> {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(list, key = { it.id }) { tx ->
+                    items(state.transactions, key = { it.id }) { tx ->
                         TransactionListItem(tx, onClick = { onOpenTransaction(tx.id) })
                     }
                     item { Spacer(Modifier.height(16.dp)) }

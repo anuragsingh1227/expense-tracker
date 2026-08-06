@@ -3,6 +3,7 @@ package com.expensetracker.ui.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -39,7 +41,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -48,9 +52,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.expensetracker.R
 import com.expensetracker.domain.model.Money
 import com.expensetracker.domain.model.Transaction
 import com.expensetracker.domain.model.TransactionType
+import com.expensetracker.ui.screen.SpendPeriod
 import com.expensetracker.ui.theme.ExpenseColors
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -186,6 +192,65 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier) {
         modifier = modifier.padding(top = 8.dp, bottom = 4.dp),
         style = MaterialTheme.typography.titleMedium,
     )
+}
+
+@Composable
+fun PeriodFilterRow(
+    selected: SpendPeriod,
+    onSelect: (SpendPeriod) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val periods = listOf(
+        SpendPeriod.DAY to stringResource(R.string.period_day),
+        SpendPeriod.WEEK to stringResource(R.string.period_week),
+        SpendPeriod.MONTH to stringResource(R.string.period_month),
+        SpendPeriod.LAST_MONTH to stringResource(R.string.period_last_month),
+        SpendPeriod.LAST_3_MONTHS to stringResource(R.string.period_last_3_months),
+    )
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        periods.forEach { (period, label) ->
+            val selectedNow = period == selected
+            val a11y = if (selectedNow) {
+                stringResource(R.string.period_selected_a11y, label)
+            } else {
+                stringResource(R.string.period_select_a11y, label)
+            }
+            Surface(
+                onClick = { onSelect(period) },
+                modifier = Modifier
+                    .heightIn(min = 44.dp)
+                    .semantics { contentDescription = a11y },
+                shape = RoundedCornerShape(999.dp),
+                color = if (selectedNow) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.surface
+                },
+                contentColor = if (selectedNow) {
+                    MaterialTheme.colorScheme.onPrimary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                border = if (selectedNow) {
+                    null
+                } else {
+                    BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                },
+            ) {
+                Text(
+                    label,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (selectedNow) FontWeight.Bold else FontWeight.Medium,
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -414,6 +479,154 @@ fun CategoryBreakdown(
                             .clip(RoundedCornerShape(999.dp))
                             .background(MaterialTheme.colorScheme.primary),
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MomRisingList(
+    changes: List<com.expensetracker.domain.insights.CategoryMomChange>,
+    modifier: Modifier = Modifier,
+) {
+    if (changes.isEmpty()) return
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        changes.forEach { row ->
+            val pct = row.percentChange
+            val changeLabel = when {
+                row.isNew -> stringResource(R.string.mom_new)
+                pct != null -> stringResource(R.string.mom_up_pct, pct)
+                else -> row.delta.formatInr()
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        row.category,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        stringResource(
+                            R.string.mom_vs_previous,
+                            row.previous.formatInr(),
+                            row.current.formatInr(),
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        "+${row.delta.formatInr()}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = ExpenseColors.Coral,
+                    )
+                    Text(
+                        changeLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StackedMonthBars(
+    columns: List<com.expensetracker.domain.insights.StackMonthColumn>,
+    modifier: Modifier = Modifier,
+) {
+    if (columns.isEmpty()) return
+    val palette = listOf(
+        ExpenseColors.Teal,
+        ExpenseColors.TealBright,
+        ExpenseColors.TealDeep,
+        ExpenseColors.Coral,
+        Color(0xFF0EA5E9),
+        Color(0xFF94A3B8),
+    )
+    val legendCats = columns
+        .flatMap { it.segments.map { seg -> seg.category } }
+        .distinct()
+
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(132.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            columns.forEach { col ->
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        col.total.formatInr(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(88.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        verticalArrangement = Arrangement.Bottom,
+                    ) {
+                        col.segments.asReversed().forEach { seg ->
+                            val colorIndex = legendCats.indexOf(seg.category).coerceAtLeast(0)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height((88f * seg.fraction).dp.coerceAtLeast(3.dp))
+                                    .background(palette[colorIndex % palette.size]),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        col.monthLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            legendCats.chunked(3).forEach { rowCats ->
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    rowCats.forEach { cat ->
+                        val colorIndex = legendCats.indexOf(cat).coerceAtLeast(0)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(palette[colorIndex % palette.size]),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                cat,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
             }
         }

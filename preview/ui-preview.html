@@ -20,6 +20,8 @@
       --card: #ffffff;
       --border: #99f6e4;
       --income: #059669;
+      --sky: #0ea5e9;
+      --slate: #94a3b8;
     }
     * { box-sizing: border-box; }
     body {
@@ -45,15 +47,33 @@
     }
     .sub {
       color: var(--ink-soft);
-      margin: 0 0 28px;
+      margin: 0 0 12px;
       font-size: 0.95rem;
+      text-align: center;
+      max-width: 36rem;
+    }
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 28px;
+    }
+    .badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--teal-deep);
     }
     .phones {
       display: flex;
       flex-wrap: wrap;
       gap: 28px;
       justify-content: center;
-      max-width: 1100px;
+      max-width: 1400px;
     }
     .phone {
       width: 320px;
@@ -64,7 +84,7 @@
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      min-height: 640px;
+      height: 720px;
     }
     .label {
       text-align: center;
@@ -81,62 +101,98 @@
       font-size: 0.7rem;
       font-weight: 600;
       color: var(--ink-soft);
+      flex-shrink: 0;
     }
     .content {
       flex: 1;
       padding: 8px 18px 12px;
-      overflow: hidden;
+      overflow-y: auto;
     }
     .greeting { font-size: 0.85rem; color: var(--ink-soft); margin: 0; }
     .title {
       font-family: "Fraunces", Georgia, serif;
-      font-size: 1.75rem;
+      font-size: 1.65rem;
       font-weight: 700;
-      margin: 4px 0 16px;
+      margin: 4px 0 12px;
       letter-spacing: -0.02em;
     }
     .hero {
       background: var(--teal);
       color: #fff;
       border-radius: 24px;
-      padding: 22px;
-      margin-bottom: 14px;
+      padding: 20px;
+      margin-bottom: 12px;
     }
     .hero .cap { font-size: 0.8rem; opacity: 0.85; margin: 0; }
+    .hero .range { font-size: 0.75rem; opacity: 0.7; margin: 4px 0 0; }
     .hero .amt {
-      font-size: 2rem;
+      font-size: 1.85rem;
       font-weight: 700;
       margin: 8px 0;
       letter-spacing: -0.03em;
     }
     .hero .support { font-size: 0.85rem; opacity: 0.9; margin: 0; }
-    .row { display: flex; gap: 12px; margin-bottom: 14px; }
+    .periods {
+      display: flex;
+      gap: 6px;
+      margin: 0 0 12px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+    .periods button {
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--ink);
+      font: inherit;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 8px 12px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    .periods button.on {
+      background: var(--teal);
+      color: #fff;
+      border-color: var(--teal);
+    }
+    .row { display: flex; gap: 10px; margin-bottom: 12px; }
     .tile {
       flex: 1;
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 18px;
-      padding: 14px;
+      border-radius: 16px;
+      padding: 12px;
     }
-    .tile .cap { font-size: 0.75rem; color: var(--ink-soft); margin: 0 0 6px; }
-    .tile .amt { font-size: 1.15rem; font-weight: 700; margin: 0; }
+    .tile.warm {
+      background: #ffedd5;
+      border-color: transparent;
+    }
+    .tile .cap { font-size: 0.72rem; color: var(--ink-soft); margin: 0 0 6px; }
+    .tile .amt { font-size: 1.05rem; font-weight: 700; margin: 0; }
+    .tile.warm .amt { color: #9a3412; }
     .tile.income .amt { color: var(--income); }
     .card {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 18px;
-      padding: 16px;
-      margin-bottom: 14px;
+      padding: 14px;
+      margin-bottom: 12px;
     }
-    .card h3 { margin: 0 0 12px; font-size: 0.95rem; }
+    .card h3 { margin: 0 0 4px; font-size: 0.92rem; }
+    .card .hint {
+      margin: 0 0 12px;
+      font-size: 0.72rem;
+      color: var(--ink-soft);
+      line-height: 1.35;
+    }
     .bar {
       display: flex;
       align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
-      font-size: 0.82rem;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 0.78rem;
     }
-    .bar .name { width: 78px; color: var(--ink-soft); }
+    .bar .name { width: 72px; color: var(--ink-soft); flex-shrink: 0; }
     .bar .track {
       flex: 1;
       height: 8px;
@@ -149,7 +205,91 @@
       background: var(--teal);
       border-radius: 99px;
     }
-    .bar .val { width: 56px; text-align: right; font-weight: 600; }
+    .bar .val { width: 52px; text-align: right; font-weight: 600; flex-shrink: 0; }
+    .stack-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+      height: 120px;
+      margin-bottom: 8px;
+    }
+    .stack-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 0;
+    }
+    .stack-col .tot {
+      font-size: 0.65rem;
+      color: var(--ink-soft);
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+    .stack {
+      width: 100%;
+      height: 88px;
+      border-radius: 10px;
+      background: var(--mint-muted);
+      display: flex;
+      flex-direction: column-reverse;
+      overflow: hidden;
+    }
+    .stack span { display: block; width: 100%; }
+    .stack .s1 { background: var(--teal); height: 42%; }
+    .stack .s2 { background: var(--teal-bright); height: 28%; }
+    .stack .s3 { background: var(--coral); height: 18%; }
+    .stack .s4 { background: var(--sky); height: 12%; }
+    .stack-col .mlabel {
+      margin-top: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      font-size: 0.68rem;
+      color: var(--ink-soft);
+    }
+    .legend i {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 99px;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+    .mom {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid #e6fffa;
+      font-size: 0.82rem;
+    }
+    .mom:last-child { border-bottom: 0; padding-bottom: 0; }
+    .mom .name { font-weight: 600; margin: 0; }
+    .mom .was { margin: 2px 0 0; font-size: 0.7rem; color: var(--ink-soft); }
+    .mom .delta { text-align: right; }
+    .mom .delta strong { display: block; color: var(--coral); font-size: 0.9rem; }
+    .mom .delta em { font-style: normal; font-size: 0.68rem; color: var(--ink-soft); }
+    .search {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      font-size: 0.82rem;
+      color: var(--ink-soft);
+    }
     .tx {
       display: flex;
       align-items: center;
@@ -168,6 +308,7 @@
       place-items: center;
       font-weight: 700;
       font-size: 0.85rem;
+      flex-shrink: 0;
     }
     .tx .meta { flex: 1; min-width: 0; }
     .tx .name { font-weight: 600; margin: 0; font-size: 0.9rem; }
@@ -180,6 +321,7 @@
       border-top: 1px solid var(--border);
       background: var(--card);
       padding: 10px 8px 16px;
+      flex-shrink: 0;
     }
     .nav button {
       flex: 1;
@@ -194,79 +336,198 @@
     }
     .nav button.active { color: var(--teal); }
     .nav .ico { display: block; font-size: 1.1rem; margin-bottom: 2px; }
-    .setting {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 14px 0;
-      border-bottom: 1px solid #e6fffa;
-      font-size: 0.9rem;
-    }
-    .setting:last-child { border-bottom: 0; }
-    .chip {
-      background: var(--mint-muted);
-      color: var(--teal-deep);
-      font-size: 0.75rem;
+    .pill {
+      display: inline-block;
+      background: #ffedd5;
+      color: #9a3412;
+      font-size: 0.7rem;
       font-weight: 600;
       padding: 4px 10px;
-      border-radius: 99px;
+      border-radius: 999px;
+      margin-bottom: 8px;
+    }
+    .pill.ok { background: var(--mint-muted); color: var(--teal-deep); }
+    .amt-lg {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin: 0 0 4px;
+    }
+    .raw {
+      font-size: 0.72rem;
+      line-height: 1.4;
+      color: var(--ink-soft);
+      background: #e6fffa;
+      border-radius: 12px;
+      padding: 10px;
+      margin: 8px 0 0;
+    }
+    .criteria {
+      font-size: 0.78rem;
+      margin: 6px 0;
+    }
+    .criteria label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .criteria input[type="text"] {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font: inherit;
+      font-size: 0.78rem;
+      margin: 0 0 8px 22px;
+      background: #fff;
+    }
+    .match-ok { color: var(--income); font-size: 0.75rem; font-weight: 600; margin: 4px 0 8px; }
+    .paste {
+      width: 100%;
+      min-height: 72px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+      font: inherit;
+      font-size: 0.75rem;
+      color: var(--ink-soft);
+      background: #fff;
+      resize: none;
     }
     .btn {
       display: block;
       width: 100%;
       margin-top: 8px;
-      padding: 12px;
+      padding: 11px;
       border: 0;
       border-radius: 14px;
       background: var(--teal);
       color: #fff;
       font: inherit;
       font-weight: 600;
-      font-size: 0.9rem;
+      font-size: 0.85rem;
     }
     .btn.secondary {
       background: var(--card);
       color: var(--teal);
       border: 1px solid var(--border);
-      margin-top: 10px;
+      margin-top: 8px;
     }
     .note {
       margin-top: 32px;
-      max-width: 640px;
+      max-width: 720px;
       text-align: center;
       color: var(--ink-soft);
       font-size: 0.9rem;
-      line-height: 1.5;
+      line-height: 1.55;
+    }
+    .note code {
+      font-size: 0.8rem;
+      background: var(--card);
+      padding: 2px 6px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
     }
   </style>
 </head>
 <body>
   <h1>Expense Tracker</h1>
-  <p class="sub">Local UI preview (Axio-inspired) — not the live Android app</p>
+  <p class="sub">Local UI preview of Spends insights, period filters, paste import, and label rules — static mock, not the live Android app</p>
+  <div class="badges">
+    <span class="badge">Day · Week · Month · Last · 3 mo</span>
+    <span class="badge">MoM rising categories</span>
+    <span class="badge">3-month stacked spend</span>
+    <span class="badge">Paste / share SMS (store-safe)</span>
+    <span class="badge">Auto-label rules</span>
+  </div>
 
   <div class="phones">
+    <!-- Spends -->
     <div>
       <div class="label">Spends</div>
       <div class="phone">
         <div class="status">9:41</div>
         <div class="content">
-          <p class="greeting">Good morning</p>
-          <h2 class="title">Spends</h2>
+          <p class="greeting">Your money, on-device</p>
+          <h2 class="title">Track spends</h2>
+          <div class="periods">
+            <button type="button">Day</button>
+            <button type="button">Week</button>
+            <button type="button" class="on">Month</button>
+            <button type="button">Last</button>
+            <button type="button">3 mo</button>
+          </div>
           <div class="hero">
             <p class="cap">Spent this month</p>
+            <p class="range">1 Aug – 6 Aug 2026</p>
             <p class="amt">₹24,680</p>
             <p class="support">Income ₹52,000 · Net ₹27,320</p>
           </div>
           <div class="row">
-            <div class="tile">
-              <p class="cap">Today</p>
-              <p class="amt">₹1,240</p>
-            </div>
-            <div class="tile income">
+            <div class="tile warm">
               <p class="cap">Income</p>
               <p class="amt">₹52,000</p>
             </div>
+            <div class="tile">
+              <p class="cap">Net</p>
+              <p class="amt">₹27,320</p>
+            </div>
           </div>
+
+          <div class="card">
+            <h3>Spend by month</h3>
+            <p class="hint">Top categories stacked for the last 3 months (on-device)</p>
+            <div class="stack-row">
+              <div class="stack-col">
+                <div class="tot">₹31.2k</div>
+                <div class="stack"><span class="s4"></span><span class="s3"></span><span class="s2"></span><span class="s1"></span></div>
+                <div class="mlabel">Jun</div>
+              </div>
+              <div class="stack-col">
+                <div class="tot">₹28.4k</div>
+                <div class="stack"><span class="s4"></span><span class="s3"></span><span class="s2"></span><span class="s1"></span></div>
+                <div class="mlabel">Jul</div>
+              </div>
+              <div class="stack-col">
+                <div class="tot">₹24.7k</div>
+                <div class="stack"><span class="s4"></span><span class="s3"></span><span class="s2"></span><span class="s1"></span></div>
+                <div class="mlabel">Aug</div>
+              </div>
+            </div>
+            <div class="legend">
+              <span><i style="background:var(--teal)"></i>Food</span>
+              <span><i style="background:var(--teal-bright)"></i>Groceries</span>
+              <span><i style="background:var(--coral)"></i>Travel</span>
+              <span><i style="background:var(--sky)"></i>Other</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Rising vs last month</h3>
+            <p class="hint">Aug 2026 so far vs full Jul 2026</p>
+            <div class="mom">
+              <div>
+                <p class="name">Food</p>
+                <p class="was">Was ₹5,100 · now ₹8,420</p>
+              </div>
+              <div class="delta"><strong>+₹3,320</strong><em>↑ 65%</em></div>
+            </div>
+            <div class="mom">
+              <div>
+                <p class="name">Groceries</p>
+                <p class="was">Was ₹3,900 · now ₹5,610</p>
+              </div>
+              <div class="delta"><strong>+₹1,710</strong><em>↑ 44%</em></div>
+            </div>
+            <div class="mom">
+              <div>
+                <p class="name">Office lunch</p>
+                <p class="was">Was ₹0 · now ₹1,240</p>
+              </div>
+              <div class="delta"><strong>+₹1,240</strong><em>New</em></div>
+            </div>
+          </div>
+
           <div class="card">
             <h3>Where money went</h3>
             <div class="bar"><span class="name">Food</span><div class="track"><div class="fill" style="width:72%"></div></div><span class="val">₹8,420</span></div>
@@ -275,25 +536,39 @@
           </div>
         </div>
         <div class="nav">
-          <button class="active"><span class="ico">⌂</span>Spends</button>
-          <button><span class="ico">☰</span>Activity</button>
-          <button><span class="ico">⚙</span>More</button>
+          <button class="active" type="button"><span class="ico">⌂</span>Spends</button>
+          <button type="button"><span class="ico">☰</span>Activity</button>
+          <button type="button"><span class="ico">⚙</span>More</button>
         </div>
       </div>
     </div>
 
+    <!-- Activity -->
     <div>
       <div class="label">Activity</div>
       <div class="phone">
         <div class="status">9:41</div>
         <div class="content">
-          <p class="greeting">All SMS money moves</p>
+          <p class="greeting">1 Aug – 6 Aug 2026</p>
           <h2 class="title">Activity</h2>
+          <div class="periods">
+            <button type="button">Day</button>
+            <button type="button">Week</button>
+            <button type="button" class="on">Month</button>
+            <button type="button">Last</button>
+            <button type="button">3 mo</button>
+          </div>
+          <div class="search">⌕ Search merchant, category, notes</div>
           <div class="card" style="padding-top:6px;padding-bottom:6px">
             <div class="tx">
               <div class="avatar">Z</div>
               <div class="meta"><p class="name">Zepto</p><p class="cat">Groceries · Today</p></div>
               <div class="money out">−₹486</div>
+            </div>
+            <div class="tx">
+              <div class="avatar">S</div>
+              <div class="meta"><p class="name">Swiggy</p><p class="cat">Office lunch · Today</p></div>
+              <div class="money out">−₹420</div>
             </div>
             <div class="tx">
               <div class="avatar">G</div>
@@ -310,49 +585,97 @@
               <div class="meta"><p class="name">Instamart</p><p class="cat">Groceries · 31 Jul</p></div>
               <div class="money out">−₹312</div>
             </div>
-            <div class="tx">
-              <div class="avatar">U</div>
-              <div class="meta"><p class="name">Uber</p><p class="cat">Travel · 30 Jul</p></div>
-              <div class="money out">−₹245</div>
-            </div>
           </div>
         </div>
         <div class="nav">
-          <button><span class="ico">⌂</span>Spends</button>
-          <button class="active"><span class="ico">☰</span>Activity</button>
-          <button><span class="ico">⚙</span>More</button>
+          <button type="button"><span class="ico">⌂</span>Spends</button>
+          <button class="active" type="button"><span class="ico">☰</span>Activity</button>
+          <button type="button"><span class="ico">⚙</span>More</button>
         </div>
       </div>
     </div>
 
+    <!-- Detail + label rule -->
     <div>
-      <div class="label">More</div>
+      <div class="label">Transaction · label rule</div>
       <div class="phone">
         <div class="status">9:41</div>
         <div class="content">
-          <p class="greeting">Backup &amp; SMS</p>
-          <h2 class="title">More</h2>
+          <p class="greeting">← Transaction</p>
+          <span class="pill">Debit</span>
+          <p class="amt-lg">₹420</p>
+          <p style="margin:0 0 12px;font-weight:600">Swiggy</p>
           <div class="card">
-            <div class="setting"><span>SMS permission</span><span class="chip">Granted</span></div>
-            <div class="setting"><span>Inbox lookback</span><span class="chip">90 days</span></div>
-            <button class="btn">Rescan SMS inbox</button>
-            <button class="btn secondary">Remove spam entries</button>
-            <button class="btn secondary">Backup to Drive file</button>
-            <button class="btn secondary">Restore from file</button>
+            <h3 style="margin-bottom:8px">Original SMS</h3>
+            <p style="margin:0;font-size:0.75rem;color:var(--ink-soft)">SMS sender · VM-HDFCBK</p>
+            <p class="raw">HDFC Bank: Rs.420.00 debited from A/c XX1234 on 06-AUG-26 to SWIGGY. UPI Ref 401234567890. Avl Bal Rs.12,450.00</p>
+          </div>
+          <div class="card">
+            <h3>Auto-label from this SMS</h3>
+            <p class="hint">Future SMS that match get this label automatically</p>
+            <div class="criteria">
+              <label><input type="checkbox" checked disabled /> Label name</label>
+              <input type="text" value="Office lunch" readonly />
+              <label><input type="checkbox" checked disabled /> Sender contains</label>
+              <input type="text" value="HDFCBK" readonly />
+              <label><input type="checkbox" checked disabled /> Message contains</label>
+              <input type="text" value="SWIGGY" readonly />
+            </div>
+            <p class="match-ok">Criteria match this SMS</p>
+            <button class="btn" type="button">Save rule</button>
+            <button class="btn secondary" type="button">Cancel</button>
           </div>
         </div>
         <div class="nav">
-          <button><span class="ico">⌂</span>Spends</button>
-          <button><span class="ico">☰</span>Activity</button>
-          <button class="active"><span class="ico">⚙</span>More</button>
+          <button type="button"><span class="ico">⌂</span>Spends</button>
+          <button class="active" type="button"><span class="ico">☰</span>Activity</button>
+          <button type="button"><span class="ico">⚙</span>More</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- More / store paste -->
+    <div>
+      <div class="label">More · store build</div>
+      <div class="phone">
+        <div class="status">9:41</div>
+        <div class="content">
+          <p class="greeting">Import SMS text, cleanup, backup</p>
+          <h2 class="title">More</h2>
+          <div class="card">
+            <h3>Add from SMS text</h3>
+            <p class="hint">Paste or share a bank/UPI message. No inbox permission (Play-safe).</p>
+            <textarea class="paste" readonly>HDFC Bank: Rs.420.00 debited… to SWIGGY…</textarea>
+            <button class="btn" type="button">Import pasted SMS</button>
+          </div>
+          <div class="card">
+            <h3>Clean spam</h3>
+            <p class="hint">Remove offers, OTPs, and non-transactions</p>
+            <button class="btn secondary" type="button">Remove spam entries</button>
+          </div>
+          <div class="card">
+            <h3>Backup &amp; restore</h3>
+            <p class="hint">JSON via system picker · Drive compatible · no app internet</p>
+            <button class="btn" type="button">Backup</button>
+            <button class="btn secondary" type="button">Restore</button>
+          </div>
+          <div class="card">
+            <span class="pill ok">No READ_SMS on store build</span>
+            <p class="hint" style="margin:0">SMS auto-inbox flavor is separate (<code>.sms</code> package) for sideload / F-Droid.</p>
+          </div>
+        </div>
+        <div class="nav">
+          <button type="button"><span class="ico">⌂</span>Spends</button>
+          <button type="button"><span class="ico">☰</span>Activity</button>
+          <button class="active" type="button"><span class="ico">⚙</span>More</button>
         </div>
       </div>
     </div>
   </div>
 
   <p class="note">
-    This is a static mock of the Compose screens. The real app runs on Android (no emulator on this Mac).
-    Install <code>releases/app-debug.apk</code> on your phone after the GitHub push.
+    Mock of Compose UI. Store release: <code>./gradlew :app:assembleStoreRelease</code> (~2.4&nbsp;MB).
+    SMS auto-import: <code>assembleSmsRelease</code>. Privacy policy: <code>docs/privacy-policy.html</code>.
   </p>
 </body>
 </html>

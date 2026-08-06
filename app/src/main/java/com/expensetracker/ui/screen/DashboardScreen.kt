@@ -28,7 +28,10 @@ import com.expensetracker.R
 import com.expensetracker.ui.components.CategoryBreakdown
 import com.expensetracker.ui.components.EmptyState
 import com.expensetracker.ui.components.MetricTile
+import com.expensetracker.ui.components.MomRisingList
+import com.expensetracker.ui.components.PeriodFilterRow
 import com.expensetracker.ui.components.SectionLabel
+import com.expensetracker.ui.components.StackedMonthBars
 import com.expensetracker.ui.components.SurfaceCard
 import com.expensetracker.ui.components.TransactionListItem
 
@@ -39,6 +42,13 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val spendLabel = when (state.period) {
+        SpendPeriod.DAY -> stringResource(R.string.period_spent_day)
+        SpendPeriod.WEEK -> stringResource(R.string.period_spent_week)
+        SpendPeriod.MONTH -> stringResource(R.string.period_spent_month)
+        SpendPeriod.LAST_MONTH -> stringResource(R.string.period_spent_last_month)
+        SpendPeriod.LAST_3_MONTHS -> stringResource(R.string.period_spent_last_3_months)
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -62,6 +72,13 @@ fun DashboardScreen(
         }
 
         item {
+            PeriodFilterRow(
+                selected = state.period,
+                onSelect = viewModel::setPeriod,
+            )
+        }
+
+        item {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
@@ -70,22 +87,30 @@ fun DashboardScreen(
             ) {
                 Column(modifier = Modifier.padding(22.dp)) {
                     Text(
-                        stringResource(R.string.month_spent_hero),
+                        spendLabel,
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
                     )
-                    Spacer(Modifier.height(8.dp))
+                    if (state.rangeLabel.isNotBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            state.rangeLabel,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f),
+                        )
+                    }
+                    Spacer(Modifier.height(10.dp))
                     Text(
-                        state.monthSpend.formatInr(),
+                        state.spend.formatInr(),
                         style = MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.Bold,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
                         stringResource(
-                            R.string.month_spend_supporting,
-                            state.monthIncome.formatInr(),
-                            state.monthNet.formatInr(),
+                            R.string.period_spend_supporting,
+                            state.income.formatInr(),
+                            state.net.formatInr(),
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f),
@@ -100,16 +125,66 @@ fun DashboardScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 MetricTile(
-                    label = stringResource(R.string.today_spent),
-                    amount = state.todaySpend,
-                    modifier = Modifier.weight(1f),
-                )
-                MetricTile(
-                    label = stringResource(R.string.month_income),
-                    amount = state.monthIncome,
+                    label = stringResource(R.string.period_income),
+                    amount = state.income,
                     emphasize = true,
                     modifier = Modifier.weight(1f),
                 )
+                MetricTile(
+                    label = stringResource(R.string.period_net),
+                    amount = state.net,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+
+        if (state.stack.any { it.total.amount.signum() > 0 }) {
+            item {
+                SurfaceCard {
+                    Text(
+                        stringResource(R.string.stack_title),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        stringResource(R.string.stack_subtitle),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    StackedMonthBars(columns = state.stack)
+                }
+            }
+        }
+
+        if (state.momChanges.isNotEmpty()) {
+            item {
+                SurfaceCard {
+                    Text(
+                        stringResource(R.string.mom_title),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        if (state.momPartial) {
+                            stringResource(
+                                R.string.mom_subtitle_partial,
+                                state.momCurrentLabel,
+                                state.momPreviousLabel,
+                            )
+                        } else {
+                            stringResource(
+                                R.string.mom_subtitle,
+                                state.momCurrentLabel,
+                                state.momPreviousLabel,
+                            )
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    MomRisingList(changes = state.momChanges)
+                }
             }
         }
 
@@ -123,7 +198,7 @@ fun DashboardScreen(
                     Spacer(Modifier.height(14.dp))
                     CategoryBreakdown(
                         categories = state.categories,
-                        totalSpend = state.monthSpend,
+                        totalSpend = state.spend,
                     )
                 }
             }

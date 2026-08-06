@@ -13,6 +13,7 @@ data class RawSms(val sender: String?, val body: String, val timestamp: Instant)
 
 class SmsParser(
     private val merchants: MerchantMatcher = DefaultMerchantMatcher,
+    private val labelRules: LabelRuleMatcher = NoLabelRules,
 ) {
 
     fun parse(sms: RawSms): Transaction? {
@@ -25,7 +26,8 @@ class SmsParser(
         val bank = BankSenders.identify(sms.sender)
         val merchantMatch = merchants.match(body)
         val merchant = merchantMatch?.displayName ?: extractMerchant(body)
-        val category = merchantMatch?.category ?: inferCategory(body, type)
+        val labeled = labelRules.match(sms.sender, body, merchant)
+        val category = labeled ?: merchantMatch?.category ?: inferCategory(body, type)
         val paymentMode = detectPaymentMode(body)
 
         val accountLast4 = ACCOUNT_LAST4.find(body)?.groupValues?.get(1)

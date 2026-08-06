@@ -33,6 +33,42 @@ class DashboardRangesTest {
     }
 
     @Test
+    fun `forPeriod week starts on Monday and ends after today`() {
+        // Friday 2024-03-15 IST
+        val clock = Clock.fixed(Instant.parse("2024-03-14T20:00:00Z"), zone)
+        val window = DashboardRanges.forPeriod(SpendPeriod.WEEK, clock)
+        assertThat(window.fromInclusive).isEqualTo(LocalDate.of(2024, 3, 11).atStartOfDay(zone).toInstant())
+        assertThat(window.toExclusive).isEqualTo(LocalDate.of(2024, 3, 16).atStartOfDay(zone).toInstant())
+        assertThat(window.labelRange).contains("11 Mar")
+    }
+
+    @Test
+    fun `forPeriod day covers only local calendar day`() {
+        val clock = Clock.fixed(Instant.parse("2024-03-14T20:00:00Z"), zone)
+        val window = DashboardRanges.forPeriod(SpendPeriod.DAY, clock)
+        assertThat(window.fromInclusive).isEqualTo(LocalDate.of(2024, 3, 15).atStartOfDay(zone).toInstant())
+        assertThat(window.toExclusive).isEqualTo(LocalDate.of(2024, 3, 16).atStartOfDay(zone).toInstant())
+    }
+
+    @Test
+    fun `forPeriod last month is previous calendar month`() {
+        val clock = Clock.fixed(Instant.parse("2024-03-14T20:00:00Z"), zone)
+        val window = DashboardRanges.forPeriod(SpendPeriod.LAST_MONTH, clock)
+        assertThat(window.fromInclusive).isEqualTo(LocalDate.of(2024, 2, 1).atStartOfDay(zone).toInstant())
+        assertThat(window.toExclusive).isEqualTo(LocalDate.of(2024, 3, 1).atStartOfDay(zone).toInstant())
+        assertThat(window.labelRange).isEqualTo("Feb 2024")
+    }
+
+    @Test
+    fun `monthCompareWindows marks partial current month`() {
+        val clock = Clock.fixed(Instant.parse("2024-03-14T20:00:00Z"), zone)
+        val compare = DashboardRanges.monthCompareWindows(clock)
+        assertThat(compare.currentIsPartial).isTrue()
+        assertThat(compare.previousFrom).isEqualTo(LocalDate.of(2024, 2, 1).atStartOfDay(zone).toInstant())
+        assertThat(compare.previousToExclusive).isEqualTo(LocalDate.of(2024, 3, 1).atStartOfDay(zone).toInstant())
+    }
+
+    @Test
     fun `millisUntilNextDay is time remaining until local midnight`() {
         val clock = Clock.fixed(Instant.parse("2024-01-12T18:30:00Z"), ZoneOffset.UTC)
         // 18:30 UTC → 5.5 hours = 19_800_000 ms until midnight UTC

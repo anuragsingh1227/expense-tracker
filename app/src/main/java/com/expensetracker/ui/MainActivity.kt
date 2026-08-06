@@ -1,5 +1,6 @@
 package com.expensetracker.ui
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -36,6 +37,8 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -60,6 +63,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.expensetracker.AppFeatures
 import com.expensetracker.R
 import com.expensetracker.ui.screen.DashboardScreen
 import com.expensetracker.ui.screen.SettingsScreen
@@ -75,9 +79,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             ExpenseTheme {
-                AppRoot()
+                AppRoot(initialIntent = intent)
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
     }
 }
 
@@ -90,27 +99,61 @@ private sealed class Tab(val route: String, val label: Int, val icon: ImageVecto
 private val tabs = listOf(Tab.Dashboard, Tab.Transactions, Tab.Settings)
 
 @Composable
-private fun AppRoot(appViewModel: AppViewModel = hiltViewModel()) {
+private fun AppRoot(
+    initialIntent: Intent?,
+    appViewModel: AppViewModel = hiltViewModel(),
+) {
     val ctx = LocalContext.current
+    val activity = ctx as? ComponentActivity
     var permissionsGranted by remember { mutableStateOf(RequiredPermissions.allGranted(ctx)) }
-    var skippedPermission by remember { mutableStateOf(false) }
+    var skippedPermission by remember { mutableStateOf(!RequiredPermissions.requiresOnboarding()) }
+    val snackbar = remember { SnackbarHostState() }
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) {
         permissionsGranted = RequiredPermissions.allGranted(ctx)
-        if (permissionsGranted) {
+        if (permissionsGranted && AppFeatures.autoSms) {
             appViewModel.runInboxScan(forceFullLookback = true)
         }
+    }
+
+    fun ingestShare(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND) return
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return
+        appViewModel.offerSharedText(text)
+    }
+
+    LaunchedEffect(initialIntent) { ingestShare(initialIntent) }
+    LaunchedEffect(activity?.intent) { ingestShare(activity?.intent) }
+
+    val pendingShare by appViewModel.pendingSharedText.collectAsState()
+    LaunchedEffect(pendingShare) {
+        val text = appViewModel.consumePendingSharedText() ?: return@LaunchedEffect
+        appViewModel.importSmsTexts(text)
+    }
+
+    val importResult by appViewModel.textImportResult.collectAsState()
+    LaunchedEffect(importResult) {
+        val result = importResult ?: return@LaunchedEffect
+        snackbar.showSnackbar(
+            message = ctx.getString(
+                R.string.sms_text_import_result,
+                result.inserted,
+                result.skipped,
+                result.rejected,
+            ),
+        )
+        appViewModel.clearTextImportResult()
     }
 
     LaunchedEffect(permissionsGranted) {
-        if (permissionsGranted) {
+        if (permissionsGranted && AppFeatures.autoSms) {
             appViewModel.runInboxScan(forceFullLookback = true)
         }
     }
 
-    if (!permissionsGranted && !skippedPermission) {
+    if (RequiredPermissions.requiresOnboarding() && !permissionsGranted && !skippedPermission) {
         PermissionOnboarding(
             onGrant = { launcher.launch(RequiredPermissions.names()) },
             onSkip = { skippedPermission = true },
@@ -124,6 +167,7 @@ private fun AppRoot(appViewModel: AppViewModel = hiltViewModel()) {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
             if (currentRoute in tabs.map { it.route }) {
                 NavigationBar(
@@ -187,9 +231,12 @@ private fun AppRoot(appViewModel: AppViewModel = hiltViewModel()) {
                     onImportBackup = { appViewModel.importBackup(it) },
                     onPurgeSpam = { appViewModel.purgeSpam() },
                     cleanupRemoved = cleanupRemoved,
+                    onImportSmsText = { appViewModel.importSmsTexts(it) },
                     onPermissionsChanged = {
                         permissionsGranted = true
-                        appViewModel.runInboxScan(forceFullLookback = true)
+                        if (AppFeatures.autoSms) {
+                            appViewModel.runInboxScan(forceFullLookback = true)
+                        }
                     },
                 )
             }
@@ -287,13 +334,11 @@ private fun PermissionOnboarding(
                 Text(stringResource(R.string.permission_skip))
             }
             Text(
-                stringResource(R.string.onboarding_footer),
+                text = stringResource(R.string.onboarding_footer),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
+                modifier = Modifier.fillMaxWidth(),
             )
         }
     }

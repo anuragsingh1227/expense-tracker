@@ -7,6 +7,7 @@ import com.expensetracker.data.backup.BackupRepository
 import com.expensetracker.data.repository.TransactionRepository
 import com.expensetracker.sms.SmsInboxScanner
 import com.expensetracker.sms.SmsScanResult
+import com.expensetracker.sms.parser.RawSms
 import com.expensetracker.sms.parser.SmsParser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -17,6 +18,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.io.OutputStream
+import java.time.Clock
+import java.time.Instant
 import javax.inject.Inject
 
 sealed class BackupUiState {
@@ -27,12 +30,20 @@ sealed class BackupUiState {
     data class Error(val message: String) : BackupUiState()
 }
 
+data class SmsTextImportResult(
+    val examined: Int,
+    val inserted: Int,
+    val skipped: Int,
+    val rejected: Int,
+)
+
 @HiltViewModel
 class AppViewModel @Inject constructor(
     private val scanner: SmsInboxScanner,
     private val backupRepository: BackupRepository,
     private val transactionRepository: TransactionRepository,
     private val parser: SmsParser,
+    private val clock: Clock,
 ) : ViewModel() {
 
     private val _lastScan = MutableStateFlow<SmsScanResult?>(null)
@@ -47,6 +58,23 @@ class AppViewModel @Inject constructor(
     private val _cleanupRemoved = MutableStateFlow<Int?>(null)
     val cleanupRemoved: StateFlow<Int?> = _cleanupRemoved.asStateFlow()
 
+    private val _textImportResult = MutableStateFlow<SmsTextImportResult?>(null)
+    val textImportResult: StateFlow<SmsTextImportResult?> = _textImportResult.asStateFlow()
+
+    private val _pendingSharedText = MutableStateFlow<String?>(null)
+    val pendingSharedText: StateFlow<String?> = _pendingSharedText.asStateFlow()
+
+    fun offerSharedText(text: String?) {
+        val trimmed = text?.trim().orEmpty()
+        _pendingSharedText.value = trimmed.takeIf { it.isNotEmpty() }
+    }
+
+    fun consumePendingSharedText(): String? {
+        val value = _pendingSharedText.value
+        _pendingSharedText.value = null
+        return value
+    }
+
     fun runInboxScan(forceFullLookback: Boolean = false) {
         if (_scanning.value) return
         viewModelScope.launch {
@@ -57,6 +85,53 @@ class AppViewModel @Inject constructor(
                 _scanning.value = false
             }
         }
+    }
+
+    /**
+     * Play-safe import: user pastes or shares SMS bodies. One message per blank line.
+     */
+    fun importSmsTexts(raw: String, senderHint: String? = null) {
+        viewModelScope.launch {
+            val chunks = raw
+                .split(Regex("\\n\\s*\\n"))
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .ifEmpty {
+                    listOfNotNull(raw.trim().takeIf { it.isNotEmpty() })
+                }
+
+            var inserted = 0
+            var skipped = 0
+            var rejected = 0
+            val now = Instant.now(clock)
+
+            withContext(Dispatchers.IO) {
+                chunks.forEachIndexed { index, body ->
+                    val tx = parser.parse(
+                        RawSms(
+                            sender = senderHint,
+                            body = body,
+                            timestamp = now.minusSeconds(index.toLong()),
+                        ),
+                    )
+                    if (tx == null) {
+                        rejected++
+                        return@forEachIndexed
+                    }
+                    if (transactionRepository.insertIfNew(tx)) inserted++ else skipped++
+                }
+            }
+            _textImportResult.value = SmsTextImportResult(
+                examined = chunks.size,
+                inserted = inserted,
+                skipped = skipped,
+                rejected = rejected,
+            )
+        }
+    }
+
+    fun clearTextImportResult() {
+        _textImportResult.value = null
     }
 
     fun purgeSpam() {

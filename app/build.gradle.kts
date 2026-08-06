@@ -5,19 +5,54 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+import java.util.Properties
+
 android {
     namespace = "com.expensetracker"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.expensetracker"
+        applicationId = "com.expensetracker.offline"
         minSdk = 29
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 100
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
+
+        // Overridden per flavor.
+        buildConfigField("boolean", "FEATURE_AUTO_SMS", "false")
+    }
+
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("store") {
+            dimension = "distribution"
+            // Play / Amazon / Galaxy Store — no SMS permission group.
+            buildConfigField("boolean", "FEATURE_AUTO_SMS", "false")
+            resValue("string", "app_name", "Expense Tracker")
+        }
+        create("sms") {
+            dimension = "distribution"
+            applicationIdSuffix = ".sms"
+            // Sideload / F-Droid / GitHub — full on-device SMS auto-import.
+            buildConfigField("boolean", "FEATURE_AUTO_SMS", "true")
+            resValue("string", "app_name", "Expense Tracker SMS")
+        }
+    }
+
+    signingConfigs {
+        create("release") {
+            val propsFile = rootProject.file("keystore.properties")
+            if (propsFile.isFile) {
+                val props = Properties().apply { propsFile.inputStream().use { load(it) } }
+                storeFile = rootProject.file(props.getProperty("storeFile"))
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
@@ -26,11 +61,19 @@ android {
             isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "proguard-rules.pro",
             )
+            val releaseSigning = signingConfigs.getByName("release")
+            signingConfig = if (releaseSigning.storeFile?.isFile == true) {
+                releaseSigning
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
         debug {
             isMinifyEnabled = false
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
         }
     }
 
@@ -60,6 +103,17 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+    }
+
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
+    }
+
+    bundle {
+        language { enableSplit = true }
+        density { enableSplit = true }
+        abi { enableSplit = true }
     }
 }
 

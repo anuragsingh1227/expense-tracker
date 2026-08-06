@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="empty_dashboard_body">Paste or share a bank/UPI SMS from More to start tracking. Everything stays on this device.</string>
+    <string name="empty_dashboard_action">Open More</string>
+    <string name="onboarding_benefit_sms">Paste or share bank SMS — no inbox access needed</string>
+    <string name="onboarding_benefit_auto">Works offline with local parsing only</string>
+    <string name="settings_subtitle">Import SMS text, cleanup, backup</string>
+    <string name="settings_privacy_body">This store build never requests SMS inbox permission. You choose which messages to paste or share. No internet permission — nothing leaves your phone unless you export a backup file yourself.</string>
+</resources>

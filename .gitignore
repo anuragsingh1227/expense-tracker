@@ -8,3 +8,11 @@
 /captures
 .externalNativeBuild
 .cxx
+
+# Signing & binaries (never commit)
+keystore.properties
+*.keystore
+*.jks
+*.apk
+*.aab
+/releases/

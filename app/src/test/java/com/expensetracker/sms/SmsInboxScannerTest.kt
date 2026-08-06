@@ -144,12 +144,18 @@ class SmsInboxScannerTest {
         override suspend fun find(id: Long): Transaction? = stored.find { it.id == id }
         override fun observeRecent(limit: Int): Flow<List<Transaction>> = flowOf(stored.take(limit))
         override fun observeAll(): Flow<List<Transaction>> = flowOf(stored)
+        override fun observeBetween(from: Instant, to: Instant, limit: Int): Flow<List<Transaction>> =
+            flowOf(stored.filter { !it.timestamp.isBefore(from) && it.timestamp.isBefore(to) }.take(limit))
         override fun observeTotal(type: TransactionType, from: Instant, to: Instant): Flow<Money> =
             flowOf(Money.ZERO)
         override fun observeSpendTotal(from: Instant, to: Instant): Flow<Money> = flowOf(Money.ZERO)
         override fun observeCategorySpend(from: Instant, to: Instant, limit: Int) =
             flowOf(emptyList<com.expensetracker.data.repository.CategorySpend>())
+        override fun observeCategoryMonthSpend(from: Instant, to: Instant) =
+            flowOf(emptyList<com.expensetracker.domain.insights.CategoryMonthSpend>())
         override fun search(query: String?): Flow<List<Transaction>> = flowOf(stored)
+        override fun searchBetween(query: String?, from: Instant, to: Instant): Flow<List<Transaction>> =
+            flowOf(stored.filter { !it.timestamp.isBefore(from) && it.timestamp.isBefore(to) })
         override suspend fun purgeNonTransactional(parser: com.expensetracker.sms.parser.SmsParser): Int = 0
     }
 }

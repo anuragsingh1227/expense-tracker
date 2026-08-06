@@ -1,10 +1,13 @@
 package com.expensetracker.data.backup
 
+import com.expensetracker.data.db.dao.LabelRuleDao
 import com.expensetracker.data.db.dao.MerchantDao
 import com.expensetracker.data.db.dao.TransactionDao
+import com.expensetracker.data.db.entity.LabelRuleEntity
 import com.expensetracker.data.db.entity.MerchantEntity
 import com.expensetracker.data.db.entity.TransactionEntity
 import com.expensetracker.sms.parser.Categories
+import com.expensetracker.sms.parser.LabelRuleCatalog
 import com.expensetracker.sms.parser.MerchantCatalog
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.Flow
@@ -22,11 +25,19 @@ class BackupRepositoryTest {
     private val clock = Clock.fixed(now, ZoneOffset.UTC)
 
     @Test
-    fun `export then import restores merchants and skips duplicate transactions`() = runTest {
+    fun `export then import restores merchants labels and skips duplicate transactions`() = runTest {
         val txDao = FakeTransactionDao()
         val merchantDao = FakeMerchantDao()
+        val labelDao = FakeLabelRuleDao()
         val catalog = MerchantCatalog(merchantDao)
+        val labels = LabelRuleCatalog(labelDao)
         catalog.remember("Groww", Categories.INVESTMENT)
+        labels.create(
+            label = "SIP",
+            senderContains = "HDFCBK",
+            bodyContains = "GROWW",
+            merchantContains = null,
+        )
 
         txDao.insert(
             TransactionEntity(
@@ -50,7 +61,7 @@ class BackupRepositoryTest {
             ),
         )
 
-        val repo = BackupRepository(txDao, catalog, clock)
+        val repo = BackupRepository(txDao, catalog, labels, clock)
         val json = repo.exportJson()
 
         val txDao2 = FakeTransactionDao()
@@ -77,12 +88,15 @@ class BackupRepositoryTest {
             ),
         )
         val catalog2 = MerchantCatalog(FakeMerchantDao())
-        val result = BackupRepository(txDao2, catalog2, clock).importJson(json)
+        val labels2 = LabelRuleCatalog(FakeLabelRuleDao())
+        val result = BackupRepository(txDao2, catalog2, labels2, clock).importJson(json)
 
         assertThat(result.transactionsInserted).isEqualTo(0)
         assertThat(result.transactionsSkipped).isEqualTo(1)
         assertThat(result.merchantsRestored).isEqualTo(1)
+        assertThat(result.labelRulesRestored).isEqualTo(1)
         assertThat(catalog2.match("paid to GROWW")?.category).isEqualTo(Categories.INVESTMENT)
+        assertThat(labels2.match("VM-HDFCBK", "paid GROWW SIP", null)).isEqualTo("SIP")
     }
 
     private class FakeTransactionDao : TransactionDao {
@@ -102,12 +116,21 @@ class BackupRepositoryTest {
         override suspend fun findByHash(hash: String): TransactionEntity? = rows.find { it.dedupeHash == hash }
         override fun observeRecent(limit: Int) = flowOf(rows.take(limit))
         override fun observeAll() = flowOf(rows)
+        override fun observeBetween(from: Instant, to: Instant, limit: Int) = flowOf(
+            rows.filter { !it.timestamp.isBefore(from) && it.timestamp.isBefore(to) }.take(limit),
+        )
         override suspend fun getAllOnce(): List<TransactionEntity> = rows.toList()
         override fun observeTotal(type: String, from: Instant, to: Instant) = flowOf(0.0)
         override fun observeSpendTotal(from: Instant, to: Instant) = flowOf(0.0)
         override fun observeCategoryTotals(from: Instant, to: Instant, limit: Int) =
             flowOf(emptyList<com.expensetracker.data.db.dao.CategoryTotal>())
+        override fun observeCategoryMonthTotals(from: Instant, to: Instant) =
+            flowOf(emptyList<com.expensetracker.data.db.dao.CategoryMonthTotal>())
         override fun search(query: String?): Flow<List<TransactionEntity>> = flowOf(rows)
+        override fun searchBetween(query: String?, from: Instant, to: Instant): Flow<List<TransactionEntity>> =
+            flowOf(
+                rows.filter { !it.timestamp.isBefore(from) && it.timestamp.isBefore(to) },
+            )
         override suspend fun getIdAndRawSms() = rows.map {
             com.expensetracker.data.db.dao.IdRawSms(it.id, it.rawSms)
         }
@@ -123,5 +146,31 @@ class BackupRepositoryTest {
         }
 
         override suspend fun getAll(): List<MerchantEntity> = rows.values.toList()
+    }
+
+    private class FakeLabelRuleDao : LabelRuleDao {
+        private val rows = mutableListOf<LabelRuleEntity>()
+        private var seq = 1L
+
+        override suspend fun insert(rule: LabelRuleEntity): Long {
+            val id = if (rule.id == 0L) seq++ else rule.id
+            rows.removeAll { it.id == id }
+            rows += rule.copy(id = id)
+            return id
+        }
+
+        override suspend fun insertAll(rules: List<LabelRuleEntity>) {
+            rules.forEach { insert(it) }
+        }
+
+        override suspend fun getAll(): List<LabelRuleEntity> = rows.toList()
+        override fun observeAll(): Flow<List<LabelRuleEntity>> = flowOf(rows.toList())
+        override suspend fun delete(id: Long) {
+            rows.removeAll { it.id == id }
+        }
+
+        override suspend fun deleteAll() {
+            rows.clear()
+        }
     }
 }

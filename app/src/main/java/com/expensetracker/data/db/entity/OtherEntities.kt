@@ -20,6 +20,19 @@ data class MerchantEntity(
     val category: String,
 )
 
+/**
+ * User-defined auto-label: when an SMS matches the non-null criteria (AND),
+ * the transaction category becomes [label].
+ */
+@Entity(tableName = "label_rules")
+data class LabelRuleEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val label: String,
+    val senderContains: String? = null,
+    val bodyContains: String? = null,
+    val merchantContains: String? = null,
+)
+
 @Entity(tableName = "banks")
 data class BankEntity(
     @PrimaryKey val senderCode: String,

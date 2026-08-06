@@ -1,8 +1,10 @@
 package com.expensetracker.data.backup
 
 import com.expensetracker.data.db.dao.TransactionDao
+import com.expensetracker.data.db.entity.LabelRuleEntity
 import com.expensetracker.data.db.entity.MerchantEntity
 import com.expensetracker.data.db.entity.TransactionEntity
+import com.expensetracker.sms.parser.LabelRuleCatalog
 import com.expensetracker.sms.parser.MerchantCatalog
 import org.json.JSONArray
 import org.json.JSONObject
@@ -16,10 +18,11 @@ data class BackupImportResult(
     val transactionsInserted: Int,
     val transactionsSkipped: Int,
     val merchantsRestored: Int,
+    val labelRulesRestored: Int = 0,
 )
 
 /**
- * JSON backup of transactions + learned merchant categories.
+ * JSON backup of transactions + learned merchant categories + label rules.
  * Write/read via the system document picker — pick Google Drive there
  * to sync across phones without giving this app internet access.
  */
@@ -27,6 +30,7 @@ data class BackupImportResult(
 class BackupRepository @Inject constructor(
     private val transactionDao: TransactionDao,
     private val merchantCatalog: MerchantCatalog,
+    private val labelRuleCatalog: LabelRuleCatalog,
     private val clock: Clock,
 ) {
 
@@ -72,6 +76,18 @@ class BackupRepository @Inject constructor(
             )
         }
         root.put("merchants", merchantArray)
+
+        val labelArray = JSONArray()
+        labelRuleCatalog.all().forEach { rule ->
+            labelArray.put(
+                JSONObject()
+                    .put("label", rule.label)
+                    .put("senderContains", rule.senderContains)
+                    .put("bodyContains", rule.bodyContains)
+                    .put("merchantContains", rule.merchantContains),
+            )
+        }
+        root.put("labelRules", labelArray)
         return root.toString(2)
     }
 
@@ -124,15 +140,31 @@ class BackupRepository @Inject constructor(
             merchantCatalog.replaceAll(merchants)
         }
 
+        val labelRules = mutableListOf<LabelRuleEntity>()
+        val labelArray = root.optJSONArray("labelRules") ?: JSONArray()
+        for (i in 0 until labelArray.length()) {
+            val o = labelArray.getJSONObject(i)
+            labelRules += LabelRuleEntity(
+                label = o.getString("label"),
+                senderContains = o.optStringOrNull("senderContains"),
+                bodyContains = o.optStringOrNull("bodyContains"),
+                merchantContains = o.optStringOrNull("merchantContains"),
+            )
+        }
+        if (labelRules.isNotEmpty()) {
+            labelRuleCatalog.replaceAll(labelRules)
+        }
+
         return BackupImportResult(
             transactionsInserted = inserted,
             transactionsSkipped = skipped,
             merchantsRestored = merchants.size,
+            labelRulesRestored = labelRules.size,
         )
     }
 
     companion object {
-        const val VERSION = 1
+        const val VERSION = 2
         const val MIME_TYPE = "application/json"
         const val FILE_PREFIX = "expense-tracker-backup"
     }

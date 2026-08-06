@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.expensetracker.data.db.entity.BudgetEntity
 import com.expensetracker.data.db.entity.CategoryEntity
+import com.expensetracker.data.db.entity.LabelRuleEntity
 import com.expensetracker.data.db.entity.MerchantEntity
 import com.expensetracker.data.db.entity.SettingsEntity
 import kotlinx.coroutines.flow.Flow
@@ -26,6 +27,27 @@ interface MerchantDao {
 
     @Query("SELECT * FROM merchants")
     suspend fun getAll(): List<MerchantEntity>
+}
+
+@Dao
+interface LabelRuleDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(rule: LabelRuleEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(rules: List<LabelRuleEntity>)
+
+    @Query("SELECT * FROM label_rules ORDER BY id DESC")
+    suspend fun getAll(): List<LabelRuleEntity>
+
+    @Query("SELECT * FROM label_rules ORDER BY id DESC")
+    fun observeAll(): Flow<List<LabelRuleEntity>>
+
+    @Query("DELETE FROM label_rules WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    @Query("DELETE FROM label_rules")
+    suspend fun deleteAll()
 }
 
 @Dao

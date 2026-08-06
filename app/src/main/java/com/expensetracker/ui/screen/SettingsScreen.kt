@@ -20,6 +20,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.expensetracker.AppFeatures
 import com.expensetracker.R
 import com.expensetracker.data.backup.BackupRepository
 import com.expensetracker.sms.SmsScanResult
@@ -50,10 +52,13 @@ fun SettingsScreen(
     onImportBackup: (java.io.InputStream) -> Unit,
     onPurgeSpam: () -> Unit = {},
     cleanupRemoved: Int? = null,
+    onImportSmsText: (String) -> Unit = {},
     onPermissionsChanged: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
+    val autoSms = AppFeatures.autoSms
     var smsGranted by remember { mutableStateOf(RequiredPermissions.allGranted(ctx)) }
+    var pasteBody by remember { mutableStateOf("") }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -96,75 +101,110 @@ fun SettingsScreen(
         )
 
         SurfaceCard {
-            Text(stringResource(R.string.settings_sms_title), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.settings_paste_title), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(6.dp))
             Text(
-                stringResource(R.string.permission_rationale),
+                stringResource(R.string.settings_paste_body),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
-            if (smsGranted) {
-                StatusPill(text = stringResource(R.string.permission_granted), positive = true)
-            } else {
-                Button(
-                    onClick = { permissionLauncher.launch(RequiredPermissions.names()) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 52.dp),
-                    shape = RoundedCornerShape(14.dp),
-                ) { Text(stringResource(R.string.grant_permission)) }
-            }
-        }
-
-        SurfaceCard {
-            Text(stringResource(R.string.settings_import_title), style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(6.dp))
-            Text(
-                stringResource(R.string.rescan_rationale),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            OutlinedTextField(
+                value = pasteBody,
+                onValueChange = { pasteBody = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 120.dp),
+                label = { Text(stringResource(R.string.settings_paste_hint)) },
+                shape = RoundedCornerShape(14.dp),
+                minLines = 4,
             )
             Spacer(Modifier.height(12.dp))
             Button(
-                onClick = onRescanInbox,
-                enabled = smsGranted && !scanning,
+                onClick = {
+                    onImportSmsText(pasteBody)
+                    pasteBody = ""
+                },
+                enabled = pasteBody.isNotBlank(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 52.dp),
                 shape = RoundedCornerShape(14.dp),
-            ) {
-                if (scanning) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                    )
-                    Spacer(Modifier.size(10.dp))
-                }
+            ) { Text(stringResource(R.string.settings_paste_action)) }
+        }
+
+        if (autoSms) {
+            SurfaceCard {
+                Text(stringResource(R.string.settings_sms_title), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(6.dp))
                 Text(
-                    if (scanning) stringResource(R.string.rescanning) else stringResource(R.string.rescan_inbox),
+                    stringResource(R.string.permission_rationale),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            }
-            lastScan?.let { result ->
-                Spacer(Modifier.height(10.dp))
-                if (result.permissionDenied) {
-                    Text(
-                        stringResource(R.string.rescan_permission_denied),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
+                Spacer(Modifier.height(12.dp))
+                if (smsGranted) {
+                    StatusPill(text = stringResource(R.string.permission_granted), positive = true)
                 } else {
+                    Button(
+                        onClick = { permissionLauncher.launch(RequiredPermissions.names()) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 52.dp),
+                        shape = RoundedCornerShape(14.dp),
+                    ) { Text(stringResource(R.string.grant_permission)) }
+                }
+            }
+
+            SurfaceCard {
+                Text(stringResource(R.string.settings_import_title), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    stringResource(R.string.rescan_rationale),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                Button(
+                    onClick = onRescanInbox,
+                    enabled = smsGranted && !scanning,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp),
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    if (scanning) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                        Spacer(Modifier.size(10.dp))
+                    }
                     Text(
-                        stringResource(
-                            R.string.rescan_result,
-                            result.examined,
-                            result.inserted,
-                            result.skipped,
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        if (scanning) stringResource(R.string.rescanning) else stringResource(R.string.rescan_inbox),
                     )
+                }
+                lastScan?.let { result ->
+                    Spacer(Modifier.height(10.dp))
+                    if (result.permissionDenied) {
+                        Text(
+                            stringResource(R.string.rescan_permission_denied),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    } else {
+                        Text(
+                            stringResource(
+                                R.string.rescan_result,
+                                result.examined,
+                                result.inserted,
+                                result.skipped,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }
@@ -246,6 +286,7 @@ fun SettingsScreen(
                             state.result.transactionsInserted,
                             state.result.transactionsSkipped,
                             state.result.merchantsRestored,
+                            state.result.labelRulesRestored,
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.secondary,

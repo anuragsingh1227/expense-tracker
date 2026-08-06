@@ -4,6 +4,7 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import com.expensetracker.sms.parser.LabelRuleCatalog
 import com.expensetracker.sms.parser.MerchantCatalog
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
@@ -16,13 +17,17 @@ import javax.inject.Inject
 class ExpenseApp : Application() {
 
     @Inject lateinit var merchantCatalog: MerchantCatalog
+    @Inject lateinit var labelRuleCatalog: LabelRuleCatalog
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        appScope.launch { merchantCatalog.refresh() }
+        appScope.launch {
+            merchantCatalog.refresh()
+            labelRuleCatalog.refresh()
+        }
     }
 
     private fun createNotificationChannel() {
