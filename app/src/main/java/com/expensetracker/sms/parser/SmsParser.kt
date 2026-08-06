@@ -112,9 +112,43 @@ class SmsParser(
     }
 
     private fun extractMerchant(body: String): String? {
-        MERCHANT_AT.find(body)?.let { return it.groupValues[1].trim().trimEnd('.', ',') }
-        MERCHANT_TO.find(body)?.let { return it.groupValues[1].trim().trimEnd('.', ',') }
+        MERCHANT_AT.find(body)?.let { match ->
+            val name = sanitizeMerchantCandidate(match.groupValues[1]) ?: return@let
+            if (isPlausibleMerchant(name)) return name
+        }
+        MERCHANT_TO.find(body)?.let { match ->
+            val name = sanitizeMerchantCandidate(match.groupValues[1]) ?: return@let
+            if (isPlausibleMerchant(name)) return name
+        }
         return null
+    }
+
+    /** Drop trailing dispute/help text that banks append after the merchant. */
+    private fun sanitizeMerchantCandidate(raw: String): String? {
+        var name = raw.trim().trimEnd('.', ',', ';', ':')
+        // "ZOMATO. To dispute call …" / "AMAZON To dispute…"
+        name = name.replace(Regex("""(?i)\s*(?:\.?\s*)?to\s+dispute\b.*$"""), "").trim()
+        name = name.replace(Regex("""(?i)\s+dispute\s+call\b.*$"""), "").trim()
+        name = name.trimEnd('.', ',', ';', ':').trim()
+        return name.takeIf { it.length >= 2 }
+    }
+
+    /**
+     * Reject phone numbers, SMS keywords, and dispute helplines that `\bto\s+`
+     * greedily captures from credit-limit / card-alert footers.
+     */
+    private fun isPlausibleMerchant(name: String): Boolean {
+        val compact = name.replace(Regex("""[\s./-]"""), "")
+        if (compact.isEmpty()) return false
+        // Pure phone / shortcode (e.g. "9215676766", "5676766").
+        if (compact.all { it.isDigit() } && compact.length in 6..13) return false
+        val upper = name.uppercase()
+        if (upper.startsWith("DISPUTE")) return false
+        if (upper.startsWith("SMS")) return false
+        if (upper.startsWith("RS") || upper.startsWith("INR") || name.startsWith("₹")) return false
+        if (DISPUTE_OR_HELPLINE.containsMatchIn(name)) return false
+        if (PHONE_HEAVY_MERCHANT.containsMatchIn(name)) return false
+        return true
     }
 
     private fun inferCategory(body: String, type: TransactionType): String {
@@ -216,8 +250,15 @@ class SmsParser(
         private val CARD_LAST4 =
             Regex("""(?i)card(?:\s*(?:no)?\.?)?\s*(?:ending(?:\s*with)?)?\s*(?:[Xx*]{2,})?\s*(\d{4})\b""")
         private val UPI_ID = Regex("""\b[a-zA-Z0-9._-]{2,}@[a-zA-Z]{2,}\b""")
-        private val MERCHANT_AT = Regex("""(?i)\bat\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40})""")
-        private val MERCHANT_TO = Regex("""(?i)\bto\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40})""")
+        // Stop before common trailing clauses (via/on/UPI/ref/dispute).
+        private val MERCHANT_AT =
+            Regex("""(?i)\bat\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|through|upi|ref|avl|bal|info|to\s+dispute)|\s*[.,;]|$)""")
+        private val MERCHANT_TO =
+            Regex("""(?i)\bto\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|through|upi|ref|avl|bal|info|to\s+dispute)|\s*[.,;]|$)""")
+        private val DISPUTE_OR_HELPLINE =
+            Regex("""(?i)\b(?:dispute|helpline|customer\s+care|toll\s*free)\b""")
+        private val PHONE_HEAVY_MERCHANT =
+            Regex("""(?i)(?:\d[\d\s/-]{6,}\d)|(?:\b\d{4,}[-/]\d{4,}\b)""")
         private val REFERENCE_PATTERNS = listOf(
             Regex("""(?i)(?:ref(?:erence)?(?:\s*no)?\.?|txn(?:\s*id)?\.?|utr)[:\s#]*([A-Z0-9]{6,})"""),
             Regex("""(?i)UPI(?:\s*ref)?[:\s]*([0-9]{9,})"""),

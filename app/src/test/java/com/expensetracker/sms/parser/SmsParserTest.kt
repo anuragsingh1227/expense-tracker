@@ -148,6 +148,28 @@ class SmsParserTest {
     }
 
     @Test
+    fun `ICICI amount-due auto-debit notice is rejected`() {
+        assertThat(parser.isTransactional(SampleSms.ICICI_AMOUNT_DUE_NOTICE)).isFalse()
+        assertThat(parser.parse(raw("AD-ICICIT-S", SampleSms.ICICI_AMOUNT_DUE_NOTICE))).isNull()
+    }
+
+    @Test
+    fun `ICICI credit-limit raise promo is rejected`() {
+        assertThat(parser.isTransactional(SampleSms.ICICI_CREDIT_LIMIT_RAISE)).isFalse()
+        assertThat(parser.parse(raw("CP-ICICIT-S", SampleSms.ICICI_CREDIT_LIMIT_RAISE))).isNull()
+    }
+
+    @Test
+    fun `card spend keeps merchant and ignores dispute helpline footer`() {
+        val tx = parser.parse(raw("AD-ICICIT-S", SampleSms.ICICI_CARD_SPEND_WITH_DISPUTE))!!
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("1122.00"))
+        assertThat(tx.merchant?.uppercase()).contains("ZOMATO")
+        assertThat(tx.merchant?.lowercase()).doesNotContain("dispute")
+        assertThat(tx.merchant).doesNotContain("18001080")
+        assertThat(tx.merchant).doesNotContain("9215676766")
+    }
+
+    @Test
     fun `balance-only alert is rejected`() {
         assertThat(parser.isTransactional(SampleSms.BALANCE_ONLY)).isFalse()
     }

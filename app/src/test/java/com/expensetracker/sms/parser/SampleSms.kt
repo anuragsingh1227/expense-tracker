@@ -82,6 +82,21 @@ object SampleSms {
     const val DUE_REMINDER_SPAM =
         "Your credit card payment due date is 12-08-24. Min amt due Rs 1,250. Outstanding Rs 18,400."
 
+    /** ICICI auto-debit due notice — future tense, not a completed spend. */
+    const val ICICI_AMOUNT_DUE_NOTICE =
+        "Total Amount of INR 34,757.45 is due on ICICI Bank Credit Card XX1014. Amount will be debited from Savings Account XX293 on 02-Aug-26. Please ignore if paid."
+
+    /** Credit-limit raise promo — must not book Rs300000 as a debit. */
+    const val ICICI_CREDIT_LIMIT_RAISE =
+        "Manage spends effectively by increasing the limit on ICICI Bank Credit Card XX1014 from Rs300000 to Rs1000000. SMS CRLIM 1014 to 5676766 to raise the limit"
+
+    /**
+     * Real card spend that also appends a dispute helpline — merchant must stay
+     * Zomato, not "dispute call 18001080/…".
+     */
+    const val ICICI_CARD_SPEND_WITH_DISPUTE =
+        "Thank you for using your ICICI Bank Credit Card XX1014 for INR 1,122.00 at ZOMATO on 01-Aug-26. To dispute call 18001080/9215676766."
+
     const val BALANCE_ONLY =
         "Your a/c XX1234 Avl Bal Rs 12,340.55 as on 12-01-24. Do not share OTP with anyone."
 

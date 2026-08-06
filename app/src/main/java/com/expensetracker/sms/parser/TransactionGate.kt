@@ -50,6 +50,23 @@ object TransactionGate {
         Regex("""\bDUE\s+DATE\b""", RegexOption.IGNORE_CASE),
         Regex("""\bMIN(?:IMUM)?\s+(?:AMT|AMOUNT)\s+DUE\b""", RegexOption.IGNORE_CASE),
         Regex("""\bOUTSTANDING\s+(?:ON|OF)\b""", RegexOption.IGNORE_CASE),
+        // Auto-pay / due notices (not completed ledger movements).
+        Regex("""\bis\s+due\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bamount\s+(?:is\s+)?due\b""", RegexOption.IGNORE_CASE),
+        Regex("""\btotal\s+amount\b.{0,48}\bis\s+due\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bwill\s+be\s+debited\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bwill\s+be\s+auto[-\s]?debited\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bplease\s+ignore\s+if\s+(?:already\s+)?paid\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bignore\s+if\s+(?:already\s+)?paid\b""", RegexOption.IGNORE_CASE),
+        // Credit-limit marketing / raise-limit instructions (not spends).
+        Regex("""\bCRLIM\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bincreas(?:e|ing)\s+(?:the\s+)?(?:credit\s+)?limit\b""", RegexOption.IGNORE_CASE),
+        Regex("""\braise\s+(?:the\s+)?(?:credit\s+)?limit\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bmanage\s+spends?\s+effectively\b""", RegexOption.IGNORE_CASE),
+        Regex(
+            """\b(?:credit\s+)?limit\s+on\b.{0,80}\bfrom\s+(?:rs\.?|inr|₹)""",
+            RegexOption.IGNORE_CASE,
+        ),
         Regex("""\bREQUESTED\s+OTP\b""", RegexOption.IGNORE_CASE),
         Regex("""\bIS\s+SCHEDULED\b""", RegexOption.IGNORE_CASE),
         Regex("""\bSCHEDULED\s+FOR\s+(?:ECS|CLEARANCE)\b""", RegexOption.IGNORE_CASE),
@@ -60,14 +77,18 @@ object TransactionGate {
         Regex("""\bOVERDRAFT\s+FACILITY\s+HAS\s+BEEN\s+SANCTIONED\b""", RegexOption.IGNORE_CASE),
     )
 
-    /** Strong ledger verbs — loose "UPI" / "purchase" alone is not enough. */
+    /**
+     * Strong ledger verbs — loose "UPI" / "purchase" / bare "CARD XX" alone is not enough.
+     * Card-limit and due notices often mention the card mask without a real spend verb.
+     */
     private val STRONG_DEBIT = listOf(
-        "HAS BEEN DEBITED", "BEEN DEBITED", "DEBITED WITH", "DEBITED FOR", "DEBITED FROM",
-        "DEBITED", "SPENT ON", "SPENT AT", "YOU'VE SPENT", "YOU HAVE SPENT", "SPENT INR", "SPENT RS",
+        "HAS BEEN DEBITED", "BEEN DEBITED", "IS DEBITED", "WAS DEBITED",
+        "DEBITED WITH", "DEBITED FOR", "DEBITED FROM", "DEBITED VIA",
+        "SPENT ON", "SPENT AT", "YOU'VE SPENT", "YOU HAVE SPENT", "SPENT INR", "SPENT RS",
         "WITHDRAWN", "WITHDRAWAL",
         "PURCHASE OF", "PURCHASE ON", "TXN OF", "TRANSACTION OF", "SENT RS", "SENT INR", "SENT ₹",
         "PAID TO", "PAID RS", "PAID INR", "CHARGED", "DR AMT", "DR/",
-        "THANK YOU FOR USING", "FOR USING YOUR", "CARD ENDING", "CARD XX",
+        "THANK YOU FOR USING",
     )
     private val STRONG_CREDIT = listOf(
         "HAS BEEN CREDITED", "BEEN CREDITED", "CREDITED WITH", "CREDITED TO", "CREDITED",
