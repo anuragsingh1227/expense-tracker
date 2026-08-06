@@ -159,6 +159,26 @@ class LedgerCalculationTest {
     }
 
     @Test
+    fun `refund nets against spend instead of inflating income`() {
+        val spend = parser.parse(RawSms("AD-ICICIB", "Rs 1,499.00 debited from ICICI Bank A/c XX789 at AMAZON on 08-08-26. Ref 900123455.", fallback))!!
+        val refund = parser.parse(RawSms("AD-ICICIB", SampleSms.AMAZON_REFUND_CREDITED, fallback))!!
+
+        assertThat(LedgerBuckets.isRefund(refund)).isTrue()
+        assertThat(LedgerBuckets.isIncome(refund)).isFalse()
+
+        val net = LedgerBuckets.spend(listOf(spend, refund))
+        assertThat(net.amount).isEqualTo(BigDecimal.ZERO.setScale(2))
+        assertThat(LedgerBuckets.income(listOf(spend, refund)).amount).isEqualTo(BigDecimal.ZERO.setScale(2))
+    }
+
+    @Test
+    fun `refund netting never goes negative when refund exceeds period spend`() {
+        val refund = parser.parse(RawSms("AD-ICICIB", SampleSms.AMAZON_REFUND_CREDITED, fallback))!!
+        val net = LedgerBuckets.spend(listOf(refund))
+        assertThat(net).isEqualTo(Money.ZERO)
+    }
+
+    @Test
     fun `date extractor reads Jul mon-name format`() {
         val instant = SmsDateExtractor.extractOrNull(
             "Acct XX126 debited with INR 4,600.00 on 23-Jul-2026",

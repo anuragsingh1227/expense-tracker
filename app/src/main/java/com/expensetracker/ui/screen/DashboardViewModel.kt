@@ -93,8 +93,10 @@ class DashboardViewModel @Inject constructor(
             }
 
             val insights = combine(
-                repository.observeCategorySpend(compare.currentFrom, compare.currentToExclusive, 20),
-                repository.observeCategorySpend(compare.previousFrom, compare.previousToExclusive, 20),
+                // Unbounded (in practice) so a category outside the display top-N never
+                // gets misread as "previous = 0" / falsely flagged "new" in MoM.
+                repository.observeCategorySpend(compare.currentFrom, compare.currentToExclusive, ALL_CATEGORIES_LIMIT),
+                repository.observeCategorySpend(compare.previousFrom, compare.previousToExclusive, ALL_CATEGORIES_LIMIT),
                 repository.observeCategoryMonthSpend(stackWindow.fromInclusive, stackWindow.toExclusive),
             ) { currentCats, previousCats, monthRows: List<CategoryMonthSpend> ->
                 PeriodInsights(
@@ -128,6 +130,10 @@ class DashboardViewModel @Inject constructor(
 
     fun setPeriod(period: SpendPeriod) {
         periodFlow.value = period
+    }
+
+    private companion object {
+        const val ALL_CATEGORIES_LIMIT = 500
     }
 }
 

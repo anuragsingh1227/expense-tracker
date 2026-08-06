@@ -175,6 +175,27 @@ class SmsParserTest {
     }
 
     @Test
+    fun `refund from a known merchant is categorized as Refund not merchant income`() {
+        val tx = parser.parse(raw("AD-ICICIB", SampleSms.AMAZON_REFUND_CREDITED))!!
+        assertThat(tx.type).isEqualTo(TransactionType.CREDIT)
+        assertThat(tx.category).isEqualTo(Categories.REFUND)
+    }
+
+    @Test
+    fun `card txn reversal without the word credited still parses as a refund`() {
+        val tx = parser.parse(raw("AD-ICICIB", SampleSms.CARD_TXN_REVERSED_NO_CREDIT_WORD))!!
+        assertThat(tx.type).isEqualTo(TransactionType.CREDIT)
+        assertThat(tx.category).isEqualTo(Categories.REFUND)
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("799.00"))
+    }
+
+    @Test
+    fun `payment to credit card via netbanking is Transfer not spend`() {
+        val tx = parser.parse(raw("VM-HDFCBK", SampleSms.PAYMENT_TO_CREDIT_CARD_TRANSFER))!!
+        assertThat(tx.category).isEqualTo(Categories.TRANSFER)
+    }
+
+    @Test
     fun `amount extractor skips balance and picks debit amount`() {
         val body =
             "Avl Bal Rs 12,340.55. Rs 245.00 debited from a/c XXXX1234 at AMAZON via UPI. UPI Ref 401234567890"

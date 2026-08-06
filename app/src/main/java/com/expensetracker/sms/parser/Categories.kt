@@ -23,9 +23,15 @@ object Categories {
     const val EDUCATION = "Education"
     const val OTHERS = "Others"
 
+    /**
+     * Reversed / refunded card or UPI amounts. Kept distinct from ordinary income
+     * so refunds net against spend instead of inflating salary/inflow totals.
+     */
+    const val REFUND = "Refund"
+
     val defaults: List<String> = listOf(
         FOOD, GROCERIES, FUEL, SHOPPING, MEDICAL, TRAVEL, TRANSPORT, ENTERTAINMENT,
         INVESTMENT, SALARY, ATM, UTILITIES, EMI, INSURANCE, RECHARGE, SUBSCRIPTION,
-        RENT, TRANSFER, CASH_WITHDRAWAL, EDUCATION, OTHERS,
+        RENT, TRANSFER, CASH_WITHDRAWAL, EDUCATION, REFUND, OTHERS,
     )
 }

@@ -70,24 +70,35 @@ interface TransactionDao {
 
     /**
      * Real inflows only — excludes Transfer credits (IMPS self-moves / card bill credits)
-     * so net cash is not inflated by money that already left another account.
+     * and Refund credits (those offset spend below, not treated as income) so net cash
+     * is not inflated by money that already left another account or was returned.
      */
     @Query(
         """
         SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) FROM transactions
         WHERE type = 'CREDIT'
           AND timestamp >= :from AND timestamp < :to
-          AND category NOT IN ('Transfer')
+          AND category NOT IN ('Transfer', 'Refund')
         """,
     )
     fun observeIncomeTotal(from: Instant, to: Instant): Flow<Double>
 
+    /**
+     * Debit spend minus Refund credits for the same window (floored at zero) —
+     * keep in sync with [com.expensetracker.domain.insights.LedgerBuckets.spend].
+     */
     @Query(
         """
-        SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) FROM transactions
-        WHERE type = 'DEBIT'
-          AND timestamp >= :from AND timestamp < :to
-          AND category NOT IN ('Transfer', 'Investment')
+        SELECT MAX(0.0, COALESCE(SUM(
+            CASE
+                WHEN type = 'DEBIT' AND category NOT IN ('Transfer', 'Investment')
+                    THEN CAST(amount AS REAL)
+                WHEN type = 'CREDIT' AND category = 'Refund'
+                    THEN -CAST(amount AS REAL)
+                ELSE 0
+            END
+        ), 0)) FROM transactions
+        WHERE timestamp >= :from AND timestamp < :to
         """,
     )
     fun observeSpendTotal(from: Instant, to: Instant): Flow<Double>

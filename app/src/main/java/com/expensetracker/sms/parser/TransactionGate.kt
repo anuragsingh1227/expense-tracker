@@ -93,6 +93,8 @@ object TransactionGate {
     private val STRONG_CREDIT = listOf(
         "HAS BEEN CREDITED", "BEEN CREDITED", "CREDITED WITH", "CREDITED TO", "CREDITED",
         "RECEIVED FROM", "RECEIVED RS", "DEPOSITED", "CR AMT", "CR/",
+        // Refund / reversal SMS often skip "credited" entirely.
+        "REFUNDED", "REFUND OF", "HAS BEEN REVERSED", "BEEN REVERSED", "REVERSED TO", "REVERSAL OF",
     )
 
     fun isTransactional(body: String): Boolean {

@@ -100,6 +100,18 @@ object SampleSms {
     const val BALANCE_ONLY =
         "Your a/c XX1234 Avl Bal Rs 12,340.55 as on 12-01-24. Do not share OTP with anyone."
 
+    /** Refund must offset spend, not count as income — even with a known merchant name. */
+    const val AMAZON_REFUND_CREDITED =
+        "Rs 1,499.00 has been credited to your ICICI Bank A/c XX789 as refund from AMAZON on 09-08-26. Ref 900123456."
+
+    /** Reversal wording without the word "credited" — must still parse as a refund. */
+    const val CARD_TXN_REVERSED_NO_CREDIT_WORD =
+        "Your transaction of Rs 799.00 on ICICI Bank Credit Card XX1014 at MYNTRA has been reversed. Ref 900654321."
+
+    /** Auto-pay of a card bill phrased as "payment to credit card" — must be Transfer. */
+    const val PAYMENT_TO_CREDIT_CARD_TRANSFER =
+        "Rs 3,200.00 debited from A/c XX1234 for payment to Credit Card XX1014 via NetBanking on 09-08-26."
+
     /** Multi-month batch for ledger / paste-import tests (blank-line separated). */
     const val LEDGER_BATCH = """
 INR 52000.00 credited to A/c XXXX9876 on 01-Jul-26 by NEFT Salary. Avl Bal Rs 80,000.00

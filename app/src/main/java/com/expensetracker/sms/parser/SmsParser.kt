@@ -29,7 +29,9 @@ class SmsParser(
         val merchantMatch = merchants.match(body)
         val merchant = merchantMatch?.displayName ?: extractMerchant(body)
         val labeled = labelRules.match(sms.sender, body, merchant)
-        val category = labeled ?: merchantMatch?.category ?: inferCategory(body, type)
+        // Ledger-correctness categories (Transfer/Refund) must win over merchant/dictionary
+        // matches — e.g. "Refund from AMAZON" must not be booked as Shopping income.
+        val category = labeled ?: resolveAutoCategory(body, type, merchantMatch?.category)
         val paymentMode = detectPaymentMode(body)
         // Prefer date written in the SMS (paste/share import has no telephony timestamp).
         val timestamp = SmsDateExtractor.extract(body, zone, sms.timestamp)
@@ -151,6 +153,27 @@ class SmsParser(
         return true
     }
 
+    /**
+     * Resolves category for rows the merchant dictionary/label rules didn't claim,
+     * but first forces Transfer/Refund so those ledger-correctness rules cannot be
+     * bypassed by a merchant match (e.g. a refund from a known merchant).
+     */
+    private fun resolveAutoCategory(body: String, type: TransactionType, merchantCategory: String?): String {
+        val upper = body.uppercase()
+        return when {
+            type == TransactionType.CREDIT && isRefundOrReversal(upper) -> Categories.REFUND
+            isSelfOrCardTransfer(upper) -> Categories.TRANSFER
+            else -> merchantCategory ?: inferCategory(body, type)
+        }
+    }
+
+    private fun isRefundOrReversal(upper: String): Boolean {
+        return upper.contains("REFUND") ||
+            upper.contains("REVERSED") ||
+            upper.contains("REVERSAL") ||
+            upper.contains("CHARGEBACK")
+    }
+
     private fun inferCategory(body: String, type: TransactionType): String {
         val upper = body.uppercase()
         return when {
@@ -178,7 +201,9 @@ class SmsParser(
     private fun isSelfOrCardTransfer(upper: String): Boolean {
         if (upper.contains("BILLPAY") || upper.contains("BILL PAY")) return true
         if (upper.contains("CREDIT CARD PAYMENT") || upper.contains("CC PAYMENT")) return true
-        if (upper.contains("TOWARDS YOUR") && upper.contains("CARD")) return true
+        if (upper.contains("CREDIT CARD BILL") || upper.contains("CC BILL")) return true
+        if (upper.contains("TOWARDS") && upper.contains("CARD")) return true
+        if (upper.contains("PAYMENT TO") && (upper.contains("CREDIT CARD") || upper.contains(" CC "))) return true
         if (upper.contains("CREDITED TO YOUR CARD") || upper.contains("CREDITED TO YOUR CC")) return true
         // IMPS/NEFT self-move templates: "Acct A debited ... & Acct B credited"
         if (upper.contains("DEBITED") && upper.contains("CREDITED") &&
