@@ -84,12 +84,13 @@ interface TransactionDao {
     fun observeIncomeTotal(from: Instant, to: Instant): Flow<Double>
 
     /**
-     * Debit spend minus Refund credits for the same window (floored at zero) —
-     * keep in sync with [com.expensetracker.domain.insights.LedgerBuckets.spend].
+     * Debit spend minus Refund credits for the same window. Not floored — a
+     * negative result means net refunds, which is real information.
+     * Keep in sync with [com.expensetracker.domain.insights.LedgerBuckets.spend].
      */
     @Query(
         """
-        SELECT MAX(0.0, COALESCE(SUM(
+        SELECT COALESCE(SUM(
             CASE
                 WHEN type = 'DEBIT' AND category NOT IN ('Transfer', 'Investment')
                     THEN CAST(amount AS REAL)
@@ -97,7 +98,7 @@ interface TransactionDao {
                     THEN -CAST(amount AS REAL)
                 ELSE 0
             END
-        ), 0)) FROM transactions
+        ), 0) FROM transactions
         WHERE timestamp >= :from AND timestamp < :to
         """,
     )

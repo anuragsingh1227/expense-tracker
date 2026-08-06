@@ -31,12 +31,15 @@ object LedgerBuckets {
     fun isRefund(tx: Transaction): Boolean =
         tx.type == TransactionType.CREDIT && tx.category == Categories.REFUND
 
-    /** Debit spend minus refunds for the same window, floored at zero. */
+    /**
+     * Debit spend minus refunds for the same window. May legitimately be negative
+     * when refunds exceed spend (e.g. a refund-only month) — that is real
+     * information, not something to hide behind a zero floor.
+     */
     fun spend(txs: Iterable<Transaction>): Money {
         val debitSpend = txs.filter(::isSpend).fold(Money.ZERO) { acc, tx -> acc + tx.amount }
         val refunds = txs.filter(::isRefund).fold(Money.ZERO) { acc, tx -> acc + tx.amount }
-        val net = debitSpend - refunds
-        return if (net.amount.signum() < 0) Money.ZERO else net
+        return debitSpend - refunds
     }
 
     fun income(txs: Iterable<Transaction>): Money =

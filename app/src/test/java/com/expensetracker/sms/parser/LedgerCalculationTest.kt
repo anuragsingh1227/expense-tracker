@@ -172,10 +172,42 @@ class LedgerCalculationTest {
     }
 
     @Test
-    fun `refund netting never goes negative when refund exceeds period spend`() {
+    fun `partial refund nets correctly against remaining spend`() {
+        val purchase = parser.parse(RawSms("AD-ICICIB", "Rs 2,000.00 debited from ICICI Bank A/c XX789 at AMAZON on 08-08-26. Ref 900123455.", fallback))!!
+        val partialRefund = parser.parse(RawSms("AD-ICICIB", SampleSms.AMAZON_REFUND_CREDITED, fallback))!! // 1499 back
+
+        val net = LedgerBuckets.spend(listOf(purchase, partialRefund))
+        // 2000 − 1499 = 501 stays spend
+        assertThat(net.amount).isEqualTo(BigDecimal("501.00"))
+        assertThat(LedgerBuckets.income(listOf(purchase, partialRefund)).amount)
+            .isEqualTo(BigDecimal.ZERO.setScale(2))
+    }
+
+    @Test
+    fun `refund-only month yields negative spend so the reversal is visible`() {
         val refund = parser.parse(RawSms("AD-ICICIB", SampleSms.AMAZON_REFUND_CREDITED, fallback))!!
         val net = LedgerBuckets.spend(listOf(refund))
-        assertThat(net).isEqualTo(Money.ZERO)
+        // Not floored at zero: a refund-only window reports negative net spend.
+        assertThat(net.amount).isEqualTo(BigDecimal("-1499.00"))
+        // And it's not income either.
+        assertThat(LedgerBuckets.income(listOf(refund)).amount).isEqualTo(BigDecimal.ZERO.setScale(2))
+    }
+
+    @Test
+    fun `credit card purchase is spend once and its auto-pay pair is Transfer not double-counted`() {
+        val purchase = parser.parse(RawSms("AD-ICICIB", SampleSms.ICICI_CARD_SPEND_WITH_DISPUTE, fallback))!!
+        val billDebit = parser.parse(RawSms("VM-HDFCBK", SampleSms.PAYMENT_TO_CREDIT_CARD_TRANSFER, fallback))!!
+        val billCredit = parser.parse(RawSms("VM-ICICIB", SampleSms.CARD_PAYMENT_CREDITED, fallback))!!
+
+        assertThat(LedgerBuckets.isSpend(purchase)).isTrue()
+        assertThat(LedgerBuckets.isTransfer(billDebit)).isTrue()
+        assertThat(LedgerBuckets.isTransfer(billCredit)).isTrue()
+
+        val all = listOf(purchase, billDebit, billCredit)
+        // Only the card purchase counts toward spend — the 3200 debit + 2487 credit cancel
+        // out as Transfers and never inflate spend or income.
+        assertThat(LedgerBuckets.spend(all).amount).isEqualTo(purchase.amount.amount)
+        assertThat(LedgerBuckets.income(all).amount).isEqualTo(BigDecimal.ZERO.setScale(2))
     }
 
     @Test
