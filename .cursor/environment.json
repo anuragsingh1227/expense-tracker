@@ -1,0 +1,5 @@
+{
+  "name": "Expense Tracker (Android)",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh"
+}
