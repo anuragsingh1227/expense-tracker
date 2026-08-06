@@ -68,6 +68,20 @@ interface TransactionDao {
     )
     fun observeTotal(type: String, from: Instant, to: Instant): Flow<Double>
 
+    /**
+     * Real inflows only — excludes Transfer credits (IMPS self-moves / card bill credits)
+     * so net cash is not inflated by money that already left another account.
+     */
+    @Query(
+        """
+        SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) FROM transactions
+        WHERE type = 'CREDIT'
+          AND timestamp >= :from AND timestamp < :to
+          AND category NOT IN ('Transfer')
+        """,
+    )
+    fun observeIncomeTotal(from: Instant, to: Instant): Flow<Double>
+
     @Query(
         """
         SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) FROM transactions
@@ -77,6 +91,16 @@ interface TransactionDao {
         """,
     )
     fun observeSpendTotal(from: Instant, to: Instant): Flow<Double>
+
+    @Query(
+        """
+        SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) FROM transactions
+        WHERE type = 'DEBIT'
+          AND timestamp >= :from AND timestamp < :to
+          AND category = 'Investment'
+        """,
+    )
+    fun observeInvestmentTotal(from: Instant, to: Instant): Flow<Double>
 
     @Query(
         """

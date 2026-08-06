@@ -51,12 +51,20 @@ object TransactionGate {
         Regex("""\bMIN(?:IMUM)?\s+(?:AMT|AMOUNT)\s+DUE\b""", RegexOption.IGNORE_CASE),
         Regex("""\bOUTSTANDING\s+(?:ON|OF)\b""", RegexOption.IGNORE_CASE),
         Regex("""\bREQUESTED\s+OTP\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bIS\s+SCHEDULED\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bSCHEDULED\s+FOR\s+(?:ECS|CLEARANCE)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bPLEASE\s+KEEP\s+SUFFICIENT\s+BALANCE\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bWILL\s+GET\s+MATURED\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bACCOUNT\s+.*\bOPENED\s+SUCCESSFULLY\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bHAS\s+BEEN\s+DELIVERED\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bOVERDRAFT\s+FACILITY\s+HAS\s+BEEN\s+SANCTIONED\b""", RegexOption.IGNORE_CASE),
     )
 
     /** Strong ledger verbs — loose "UPI" / "purchase" alone is not enough. */
     private val STRONG_DEBIT = listOf(
         "HAS BEEN DEBITED", "BEEN DEBITED", "DEBITED WITH", "DEBITED FOR", "DEBITED FROM",
-        "DEBITED", "SPENT ON", "SPENT AT", "WITHDRAWN", "WITHDRAWAL",
+        "DEBITED", "SPENT ON", "SPENT AT", "YOU'VE SPENT", "YOU HAVE SPENT", "SPENT INR", "SPENT RS",
+        "WITHDRAWN", "WITHDRAWAL",
         "PURCHASE OF", "PURCHASE ON", "TXN OF", "TRANSACTION OF", "SENT RS", "SENT INR", "SENT ₹",
         "PAID TO", "PAID RS", "PAID INR", "CHARGED", "DR AMT", "DR/",
         "THANK YOU FOR USING", "FOR USING YOUR", "CARD ENDING", "CARD XX",

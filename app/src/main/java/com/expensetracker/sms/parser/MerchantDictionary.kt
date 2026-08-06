@@ -19,6 +19,8 @@ object MerchantDictionary {
         Entry("DMART", "DMart", Categories.GROCERIES),
         Entry("D-MART", "DMart", Categories.GROCERIES),
         Entry("JIOMART", "JioMart", Categories.GROCERIES),
+        Entry("JIO MONEY", "JioMoney", Categories.RECHARGE),
+        Entry("BD JIO MONEY", "JioMoney", Categories.RECHARGE),
         Entry("NATURES BASKET", "Nature's Basket", Categories.GROCERIES),
         Entry("MORE SUPERMARKET", "More Supermarket", Categories.GROCERIES),
         Entry("BBNOW", "BigBasket Now", Categories.GROCERIES),

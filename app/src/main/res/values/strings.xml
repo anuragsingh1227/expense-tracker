@@ -26,9 +26,10 @@
     <string name="period_spent_month">Spent this month</string>
     <string name="period_spent_last_month">Spent last month</string>
     <string name="period_spent_last_3_months">Spent last 3 months</string>
-    <string name="period_spend_supporting">Income %1$s · Net %2$s</string>
+    <string name="period_spend_supporting">Income %1$s · Invested %2$s · Net %3$s</string>
     <string name="period_income">Income</string>
-    <string name="period_net">Net</string>
+    <string name="period_investments">Invested</string>
+    <string name="period_net">Net cash</string>
     <string name="period_select_a11y">Show %1$s</string>
     <string name="period_selected_a11y">Showing %1$s</string>
     <string name="empty_period_transactions">No payments in this period. Try another filter or rescan SMS.</string>

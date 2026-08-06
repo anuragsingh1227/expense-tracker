@@ -50,7 +50,8 @@ object DatabaseModule {
     fun provideSmsParser(
         merchants: MerchantCatalog,
         labelRules: LabelRuleCatalog,
-    ): SmsParser = SmsParser(merchants, labelRules)
+        clock: Clock,
+    ): SmsParser = SmsParser(merchants, labelRules, clock.zone)
 }
 
 @Module

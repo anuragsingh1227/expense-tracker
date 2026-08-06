@@ -8,12 +8,14 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.security.MessageDigest
 import java.time.Instant
+import java.time.ZoneId
 
 data class RawSms(val sender: String?, val body: String, val timestamp: Instant)
 
 class SmsParser(
     private val merchants: MerchantMatcher = DefaultMerchantMatcher,
     private val labelRules: LabelRuleMatcher = NoLabelRules,
+    private val zone: ZoneId = ZoneId.systemDefault(),
 ) {
 
     fun parse(sms: RawSms): Transaction? {
@@ -29,6 +31,8 @@ class SmsParser(
         val labeled = labelRules.match(sms.sender, body, merchant)
         val category = labeled ?: merchantMatch?.category ?: inferCategory(body, type)
         val paymentMode = detectPaymentMode(body)
+        // Prefer date written in the SMS (paste/share import has no telephony timestamp).
+        val timestamp = SmsDateExtractor.extract(body, zone, sms.timestamp)
 
         val accountLast4 = ACCOUNT_LAST4.find(body)?.groupValues?.get(1)
         val cardLast4 = CARD_LAST4.find(body)?.groupValues?.get(1)
@@ -49,12 +53,12 @@ class SmsParser(
             referenceNumber = referenceNumber,
             balance = balance,
             paymentMode = paymentMode,
-            timestamp = sms.timestamp,
+            timestamp = timestamp,
             sender = sms.sender,
             rawSms = sms.body,
             narration = narration,
             notes = null,
-            dedupeHash = computeHash(sms.sender, amount.amount, sms.timestamp, referenceNumber, sms.body),
+            dedupeHash = computeHash(sms.sender, amount.amount, timestamp, referenceNumber, sms.body),
         )
     }
 
@@ -64,6 +68,21 @@ class SmsParser(
         val upper = body.uppercase()
             .replace("CREDIT CARD", "CC_NOUN")
             .replace("DEBIT CARD", "DC_NOUN")
+            // "Available credit limit" must not count as a CREDIT txn verb.
+            .replace("AVAILABLE CREDIT LIMIT", "AVL_LIMIT")
+            .replace("CREDIT LIMIT", "AVL_LIMIT")
+            .replace("AVL LIMIT", "AVL_LIMIT")
+            .replace("AVBL LIMIT", "AVL_LIMIT")
+        if (upper.contains("REVERSED") ||
+            upper.contains("REVERSAL") ||
+            upper.contains("REFUND") ||
+            upper.contains("WAS CREDITED") ||
+            upper.contains("HAS BEEN CREDITED") ||
+            upper.contains("CREDITED TO YOUR") ||
+            upper.contains("CREDITED WITH")
+        ) {
+            return TransactionType.CREDIT
+        }
         val creditHit = CREDIT_WORDS.any { upper.contains(it) }
         val debitHit = DEBIT_WORDS.any { upper.contains(it) }
         return when {
@@ -102,6 +121,7 @@ class SmsParser(
         val upper = body.uppercase()
         return when {
             type == TransactionType.CREDIT && (upper.contains("SALARY") || upper.contains("SAL CR")) -> Categories.SALARY
+            isSelfOrCardTransfer(upper) -> Categories.TRANSFER
             upper.contains("ATM") || upper.contains("CASH WDL") -> Categories.CASH_WITHDRAWAL
             upper.contains("EMI") -> Categories.EMI
             upper.contains("RENT") -> Categories.RENT
@@ -115,6 +135,27 @@ class SmsParser(
             type == TransactionType.CREDIT -> Categories.TRANSFER
             else -> Categories.OTHERS
         }
+    }
+
+    /**
+     * Card bill pays and account-to-account moves must not inflate “spend”
+     * (card spends already hit the ledger when the purchase SMS arrived).
+     */
+    private fun isSelfOrCardTransfer(upper: String): Boolean {
+        if (upper.contains("BILLPAY") || upper.contains("BILL PAY")) return true
+        if (upper.contains("CREDIT CARD PAYMENT") || upper.contains("CC PAYMENT")) return true
+        if (upper.contains("TOWARDS YOUR") && upper.contains("CARD")) return true
+        if (upper.contains("CREDITED TO YOUR CARD") || upper.contains("CREDITED TO YOUR CC")) return true
+        // IMPS/NEFT self-move templates: "Acct A debited ... & Acct B credited"
+        if (upper.contains("DEBITED") && upper.contains("CREDITED") &&
+            (upper.contains("IMPS") || upper.contains("NEFT") || upper.contains("RTGS"))
+        ) {
+            return true
+        }
+        if (Regex("""ACCT\s+XX\d+\s+DEBITED.*ACCT\s+XX\d+\s+CREDITED""").containsMatchIn(upper)) {
+            return true
+        }
+        return false
     }
 
     private fun extractReference(body: String): String? {

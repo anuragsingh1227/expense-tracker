@@ -121,7 +121,9 @@ class BackupRepositoryTest {
         )
         override suspend fun getAllOnce(): List<TransactionEntity> = rows.toList()
         override fun observeTotal(type: String, from: Instant, to: Instant) = flowOf(0.0)
+        override fun observeIncomeTotal(from: Instant, to: Instant) = flowOf(0.0)
         override fun observeSpendTotal(from: Instant, to: Instant) = flowOf(0.0)
+        override fun observeInvestmentTotal(from: Instant, to: Instant) = flowOf(0.0)
         override fun observeCategoryTotals(from: Instant, to: Instant, limit: Int) =
             flowOf(emptyList<com.expensetracker.data.db.dao.CategoryTotal>())
         override fun observeCategoryMonthTotals(from: Instant, to: Instant) =

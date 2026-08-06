@@ -148,7 +148,9 @@ class SmsInboxScannerTest {
             flowOf(stored.filter { !it.timestamp.isBefore(from) && it.timestamp.isBefore(to) }.take(limit))
         override fun observeTotal(type: TransactionType, from: Instant, to: Instant): Flow<Money> =
             flowOf(Money.ZERO)
+        override fun observeIncomeTotal(from: Instant, to: Instant): Flow<Money> = flowOf(Money.ZERO)
         override fun observeSpendTotal(from: Instant, to: Instant): Flow<Money> = flowOf(Money.ZERO)
+        override fun observeInvestmentTotal(from: Instant, to: Instant): Flow<Money> = flowOf(Money.ZERO)
         override fun observeCategorySpend(from: Instant, to: Instant, limit: Int) =
             flowOf(emptyList<com.expensetracker.data.repository.CategorySpend>())
         override fun observeCategoryMonthSpend(from: Instant, to: Instant) =

@@ -30,8 +30,11 @@ interface TransactionRepository {
     fun observeAll(): Flow<List<Transaction>>
     fun observeBetween(from: Instant, to: Instant, limit: Int = 20): Flow<List<Transaction>>
     fun observeTotal(type: TransactionType, from: Instant, to: Instant): Flow<Money>
+    /** Credits excluding Transfer — salary/refunds, not self-moves. */
+    fun observeIncomeTotal(from: Instant, to: Instant): Flow<Money>
     /** Debits excluding Transfer/Investment — matches typical “spend” views. */
     fun observeSpendTotal(from: Instant, to: Instant): Flow<Money>
+    fun observeInvestmentTotal(from: Instant, to: Instant): Flow<Money>
     fun observeCategorySpend(from: Instant, to: Instant, limit: Int = 6): Flow<List<CategorySpend>>
     fun observeCategoryMonthSpend(from: Instant, to: Instant): Flow<List<CategoryMonthSpend>>
     fun search(query: String?): Flow<List<Transaction>>
@@ -68,8 +71,14 @@ class TransactionRepositoryImpl @Inject constructor(
     override fun observeTotal(type: TransactionType, from: Instant, to: Instant): Flow<Money> =
         dao.observeTotal(type.name, from, to).map { it.toMoney() }
 
+    override fun observeIncomeTotal(from: Instant, to: Instant): Flow<Money> =
+        dao.observeIncomeTotal(from, to).map { it.toMoney() }
+
     override fun observeSpendTotal(from: Instant, to: Instant): Flow<Money> =
         dao.observeSpendTotal(from, to).map { it.toMoney() }
+
+    override fun observeInvestmentTotal(from: Instant, to: Instant): Flow<Money> =
+        dao.observeInvestmentTotal(from, to).map { it.toMoney() }
 
     override fun observeCategorySpend(from: Instant, to: Instant, limit: Int): Flow<List<CategorySpend>> =
         dao.observeCategoryTotals(from, to, limit).map { rows ->

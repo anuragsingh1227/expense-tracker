@@ -110,6 +110,7 @@ fun DashboardScreen(
                         stringResource(
                             R.string.period_spend_supporting,
                             state.income.formatInr(),
+                            state.investments.formatInr(),
                             state.net.formatInr(),
                         ),
                         style = MaterialTheme.typography.bodyMedium,
@@ -131,11 +132,19 @@ fun DashboardScreen(
                     modifier = Modifier.weight(1f),
                 )
                 MetricTile(
-                    label = stringResource(R.string.period_net),
-                    amount = state.net,
+                    label = stringResource(R.string.period_investments),
+                    amount = state.investments,
                     modifier = Modifier.weight(1f),
                 )
             }
+        }
+
+        item {
+            MetricTile(
+                label = stringResource(R.string.period_net),
+                amount = state.net,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
 
         if (state.stack.any { it.total.amount.signum() > 0 }) {

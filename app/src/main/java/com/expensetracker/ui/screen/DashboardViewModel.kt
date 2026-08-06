@@ -7,10 +7,10 @@ import com.expensetracker.data.repository.TransactionRepository
 import com.expensetracker.domain.insights.CategoryMomChange
 import com.expensetracker.domain.insights.CategoryMonthSpend
 import com.expensetracker.domain.insights.SpendInsights
+import com.expensetracker.domain.insights.SpendMath
 import com.expensetracker.domain.insights.StackMonthColumn
 import com.expensetracker.domain.model.Money
 import com.expensetracker.domain.model.Transaction
-import com.expensetracker.domain.model.TransactionType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -31,6 +31,7 @@ data class DashboardState(
     val rangeLabel: String = "",
     val spend: Money = Money.ZERO,
     val income: Money = Money.ZERO,
+    val investments: Money = Money.ZERO,
     val categories: List<CategorySpend> = emptyList(),
     val recent: List<Transaction> = emptyList(),
     val momChanges: List<CategoryMomChange> = emptyList(),
@@ -39,12 +40,14 @@ data class DashboardState(
     val momPartial: Boolean = false,
     val stack: List<StackMonthColumn> = emptyList(),
 ) {
-    val net: Money get() = income - spend
+    /** Income − spend − investments (transfers ignored). */
+    val net: Money get() = SpendMath.netCashFlow(income, spend, investments)
 }
 
 private data class PeriodCore(
     val spend: Money,
     val income: Money,
+    val investments: Money,
     val categories: List<CategorySpend>,
     val recent: List<Transaction>,
 )
@@ -75,11 +78,18 @@ class DashboardViewModel @Inject constructor(
 
             val core = combine(
                 repository.observeSpendTotal(window.fromInclusive, window.toExclusive),
-                repository.observeTotal(TransactionType.CREDIT, window.fromInclusive, window.toExclusive),
-                repository.observeCategorySpend(window.fromInclusive, window.toExclusive, 6),
+                repository.observeIncomeTotal(window.fromInclusive, window.toExclusive),
+                repository.observeInvestmentTotal(window.fromInclusive, window.toExclusive),
+                repository.observeCategorySpend(window.fromInclusive, window.toExclusive, 5),
                 repository.observeBetween(window.fromInclusive, window.toExclusive, 12),
-            ) { spend, income, categories, recent ->
-                PeriodCore(spend, income, categories, recent)
+            ) { spend, income, investments, categories, recent ->
+                PeriodCore(
+                    spend = spend,
+                    income = income,
+                    investments = investments,
+                    categories = SpendMath.withOtherBucket(categories, spend),
+                    recent = recent,
+                )
             }
 
             val insights = combine(
@@ -103,6 +113,7 @@ class DashboardViewModel @Inject constructor(
                     rangeLabel = window.labelRange,
                     spend = c.spend,
                     income = c.income,
+                    investments = c.investments,
                     categories = c.categories,
                     recent = c.recent,
                     momChanges = i.momChanges,

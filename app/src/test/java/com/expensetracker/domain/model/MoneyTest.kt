@@ -1,5 +1,6 @@
 package com.expensetracker.domain.model
 
+import com.expensetracker.domain.insights.SpendMath
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import java.math.BigDecimal
@@ -28,5 +29,20 @@ class MoneyTest {
         val income = Money.ofRupees("50000.00")
         val expense = Money.ofRupees("245.00")
         assertThat((income - expense).amount).isEqualTo(BigDecimal("49755.00"))
+    }
+
+    @Test
+    fun `dashboard net uses SpendMath not ad-hoc income minus spend`() {
+        val income = Money.ofRupees("52000.00")
+        val spend = Money.ofRupees("3336.00")
+        val invest = Money.ofRupees("5000.00")
+        assertThat(SpendMath.netCashFlow(income, spend, invest).amount)
+            .isEqualTo(BigDecimal("43664.00"))
+    }
+
+    @Test
+    fun `large credit-limit style amount keeps exact scale`() {
+        assertThat(Money.ofRupees("2,26,151.86").amount).isEqualTo(BigDecimal("226151.86"))
+        assertThat(Money.ofRupees("2,26,151.86").formatInr()).isEqualTo("₹2,26,151.86")
     }
 }
