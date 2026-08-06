@@ -112,6 +112,22 @@ object SampleSms {
     const val PAYMENT_TO_CREDIT_CARD_TRANSFER =
         "Rs 3,200.00 debited from A/c XX1234 for payment to Credit Card XX1014 via NetBanking on 09-08-26."
 
+    /** ICICI card spend using "is used for" — no "debited" verb. */
+    const val ICICI_CARD_IS_USED =
+        "ICICI Bank Credit Card XX1014 is used for Rs 2,450.00 at AMAZON on 05-Aug-26. Avl limit Rs 46,251.00"
+
+    /** ICICI card spend using "has been used for a transaction of". */
+    const val ICICI_CARD_HAS_BEEN_USED =
+        "Dear Customer, your ICICI Bank Credit Card XX1014 has been used for a transaction of Rs 1,122.00 on 01-Aug-26 at ZOMATO. Avl limit: Rs 48,701.00"
+
+    /** UPI debit with merchant name after the UPI reference number. */
+    const val UPI_WITH_NAMED_MERCHANT =
+        "Rs 450.00 debited from A/c XX1234 on 07-Aug-26 for UPI/412839-SWIGGY. Avl Bal Rs 8,200.00"
+
+    /** UPI debit with only a reference number — no merchant name. */
+    const val UPI_REF_ONLY =
+        "Rs 1,000.00 debited from A/c XX1234 on 05-Aug-26 for UPI/123456789012. Avl Bal Rs 8,200.00"
+
     /** Multi-month batch for ledger / paste-import tests (blank-line separated). */
     const val LEDGER_BATCH = """
 INR 52000.00 credited to A/c XXXX9876 on 01-Jul-26 by NEFT Salary. Avl Bal Rs 80,000.00

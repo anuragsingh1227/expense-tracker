@@ -122,6 +122,11 @@ class SmsParser(
             val name = sanitizeMerchantCandidate(match.groupValues[1]) ?: return@let
             if (isPlausibleMerchant(name)) return name
         }
+        // "for UPI/123456-SWIGGY" or "for UPI/SWIGGY" — the name after the slash/dash.
+        UPI_MERCHANT.find(body)?.let { match ->
+            val name = match.groupValues[1].trim().trimEnd('.', ',')
+            if (name.length >= 2 && isPlausibleMerchant(name)) return name
+        }
         return null
     }
 
@@ -248,7 +253,9 @@ class SmsParser(
             append(amount.toPlainString()).append('|')
             append(minute).append('|')
             append(reference.orEmpty()).append('|')
-            if (reference.isNullOrBlank()) append(body.replace(Regex("\\s+"), " ").take(32))
+            // Use the full normalized body so same-amount same-minute UPI rows
+            // without a reference number don't collide and silently drop.
+            if (reference.isNullOrBlank()) append(body.replace(Regex("\\s+"), " ").take(256))
         }
         val md = MessageDigest.getInstance("SHA-256")
         return md.digest(key.toByteArray()).joinToString("") { "%02x".format(it) }
@@ -275,6 +282,9 @@ class SmsParser(
         private val CARD_LAST4 =
             Regex("""(?i)card(?:\s*(?:no)?\.?)?\s*(?:ending(?:\s*with)?)?\s*(?:[Xx*]{2,})?\s*(\d{4})\b""")
         private val UPI_ID = Regex("""\b[a-zA-Z0-9._-]{2,}@[a-zA-Z]{2,}\b""")
+        // "for UPI/123456-SWIGGY" or "for UPI/SWIGGY" — capture the name part.
+        private val UPI_MERCHANT =
+            Regex("""(?i)\bfor\s+UPI/[A-Z0-9]*[-/]?([A-Z][A-Z0-9 .&'*]{1,38}?)(?=\s+(?:via|on|through|ref|avl|bal|info)|\s*[.,;]|$)""")
         // Stop before common trailing clauses (via/on/UPI/ref/dispute).
         private val MERCHANT_AT =
             Regex("""(?i)\bat\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|through|upi|ref|avl|bal|info|to\s+dispute)|\s*[.,;]|$)""")

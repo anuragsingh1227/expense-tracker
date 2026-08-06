@@ -196,6 +196,43 @@ class SmsParserTest {
     }
 
     @Test
+    fun `ICICI card spend with is-used-for template parses as debit`() {
+        val tx = parser.parse(raw("AD-ICICIT-S", SampleSms.ICICI_CARD_IS_USED))!!
+        assertThat(tx.type).isEqualTo(TransactionType.DEBIT)
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("2450.00"))
+        assertThat(tx.merchant?.uppercase()).contains("AMAZON")
+    }
+
+    @Test
+    fun `ICICI card spend with has-been-used template parses as debit`() {
+        val tx = parser.parse(raw("AD-ICICIT-S", SampleSms.ICICI_CARD_HAS_BEEN_USED))!!
+        assertThat(tx.type).isEqualTo(TransactionType.DEBIT)
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("1122.00"))
+        assertThat(tx.merchant?.uppercase()).contains("ZOMATO")
+    }
+
+    @Test
+    fun `UPI debit with named merchant after reference extracts merchant`() {
+        val tx = parser.parse(raw("VM-HDFCBK", SampleSms.UPI_WITH_NAMED_MERCHANT))!!
+        assertThat(tx.merchant?.uppercase()).contains("SWIGGY")
+    }
+
+    @Test
+    fun `UPI debit with only a reference number has no merchant`() {
+        val tx = parser.parse(raw("VM-HDFCBK", SampleSms.UPI_REF_ONLY))!!
+        assertThat(tx.merchant).isNull()
+    }
+
+    @Test
+    fun `same-amount same-minute UPI rows with different bodies are not deduped`() {
+        val body1 = "Rs 1,000.00 debited from A/c XX1234 on 05-Aug-26 for UPI/111111111111. Avl Bal Rs 8,200.00"
+        val body2 = "Rs 1,000.00 debited from A/c XX1234 on 05-Aug-26 for UPI/222222222222. Avl Bal Rs 7,200.00"
+        val a = parser.parse(raw("VM-HDFCBK", body1))!!
+        val b = parser.parse(raw("VM-HDFCBK", body2))!!
+        assertThat(a.dedupeHash).isNotEqualTo(b.dedupeHash)
+    }
+
+    @Test
     fun `amount extractor skips balance and picks debit amount`() {
         val body =
             "Avl Bal Rs 12,340.55. Rs 245.00 debited from a/c XXXX1234 at AMAZON via UPI. UPI Ref 401234567890"

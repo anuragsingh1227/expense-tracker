@@ -88,7 +88,11 @@ object TransactionGate {
         "WITHDRAWN", "WITHDRAWAL",
         "PURCHASE OF", "PURCHASE ON", "TXN OF", "TRANSACTION OF", "SENT RS", "SENT INR", "SENT ₹",
         "PAID TO", "PAID RS", "PAID INR", "CHARGED", "DR AMT", "DR/",
+        "PAYMENT OF", "MADE A PAYMENT",
         "THANK YOU FOR USING",
+        // ICICI card-spend templates that skip "debited" entirely.
+        "IS USED FOR", "HAS BEEN USED", "BEEN USED FOR", "USED FOR RS", "USED FOR INR",
+        "WAS USED FOR", "CARD USED",
     )
     private val STRONG_CREDIT = listOf(
         "HAS BEEN CREDITED", "BEEN CREDITED", "CREDITED WITH", "CREDITED TO", "CREDITED",
