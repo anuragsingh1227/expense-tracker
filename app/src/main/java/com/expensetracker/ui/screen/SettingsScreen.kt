@@ -426,7 +426,7 @@ fun SettingsScreen(
                     .heightIn(min = 52.dp),
                 shape = RoundedCornerShape(14.dp),
             ) { Text(stringResource(R.string.export_csv)) }
-            when (val state = csvExportState) {
+            when (csvExportState) {
                 is BackupUiState.Working -> {
                     Spacer(Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {

@@ -229,7 +229,7 @@ private fun BudgetProgressRow(
         )
         Spacer(Modifier.height(6.dp))
         LinearProgressIndicator(
-            progress = progress,
+            progress = { progress },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(6.dp),
