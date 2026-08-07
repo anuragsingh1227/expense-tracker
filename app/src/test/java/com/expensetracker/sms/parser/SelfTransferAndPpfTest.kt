@@ -55,11 +55,12 @@ class SelfTransferAndPpfTest {
 
     @Test
     fun `60000 self-transfer pairs from raw SMS even when stored refs are blank`() {
+        val t = Instant.parse("2026-08-04T02:00:00Z")
         val debit = parser.parse(
-            RawSms("AX-ICICIB", SampleSms.OWN_ACCOUNT_UPI_DEBIT_60000, now),
+            RawSms("AX-ICICIB", SampleSms.OWN_ACCOUNT_UPI_DEBIT_60000, t),
         )!!.copy(id = 21, referenceNumber = null, category = Categories.OTHERS)
         val credit = parser.parse(
-            RawSms("AX-AXISBK-S", SampleSms.OWN_ACCOUNT_UPI_CREDIT_60000, now.plusSeconds(90)),
+            RawSms("AX-AXISBK-S", SampleSms.OWN_ACCOUNT_UPI_CREDIT_60000, t.plusSeconds(90)),
         )!!.copy(id = 22, referenceNumber = null)
 
         assertThat(SelfTransferLinker.extractReferenceFromRaw(debit.rawSms))
