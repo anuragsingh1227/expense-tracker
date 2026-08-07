@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -27,7 +28,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -36,6 +40,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +53,7 @@ import androidx.lifecycle.viewModelScope
 import com.expensetracker.R
 import com.expensetracker.data.db.entity.LabelRuleEntity
 import com.expensetracker.data.repository.TransactionRepository
+import com.expensetracker.domain.model.PaymentMode
 import com.expensetracker.domain.model.Transaction
 import com.expensetracker.domain.model.TransactionType
 import com.expensetracker.sms.parser.Categories
@@ -77,6 +83,10 @@ class TransactionDetailViewModel @Inject constructor(
     private val _ruleSavedMessage = MutableStateFlow<String?>(null)
     val ruleSavedMessage: StateFlow<String?> = _ruleSavedMessage.asStateFlow()
 
+    /** Increments on every successful save — UI shows a "Saved" snackbar when it changes. */
+    private val _saveEvent = MutableStateFlow(0)
+    val saveEvent: StateFlow<Int> = _saveEvent.asStateFlow()
+
     fun load(id: Long) {
         viewModelScope.launch { _state.value = repository.find(id) }
     }
@@ -96,6 +106,7 @@ class TransactionDetailViewModel @Inject constructor(
                 }
             }
             _state.value = repository.find(updated.id)
+            _saveEvent.value += 1
         }
     }
 
@@ -178,6 +189,35 @@ fun TransactionDetailScreen(
     LaunchedEffect(transactionId) { viewModel.load(transactionId) }
     val tx: Transaction? by viewModel.state.collectAsState()
     val ruleMessage by viewModel.ruleSavedMessage.collectAsState()
+    val saveEvent by viewModel.saveEvent.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val savedMessage = stringResource(R.string.transaction_saved)
+    var ruleNeedsCriteria by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+
+    LaunchedEffect(saveEvent) {
+        if (saveEvent > 0) scope.launch { snackbarHostState.showSnackbar(savedMessage) }
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(stringResource(R.string.delete_confirm_title)) },
+            text = { Text(stringResource(R.string.delete_confirm_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmDelete = false
+                        viewModel.delete(transactionId, onBack)
+                    },
+                ) { Text(stringResource(R.string.action_confirm_delete), color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.action_cancel)) }
+            },
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -199,6 +239,7 @@ fun TransactionDetailScreen(
                 ),
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         val current = tx
@@ -246,9 +287,13 @@ fun TransactionDetailScreen(
                 "OK" -> {
                     category = labelName.trim().ifEmpty { category }
                     showLabelForm = false
+                    ruleNeedsCriteria = false
                     viewModel.clearRuleMessage()
                 }
-                "NEED_CRITERIA" -> viewModel.clearRuleMessage()
+                "NEED_CRITERIA" -> {
+                    ruleNeedsCriteria = true
+                    viewModel.clearRuleMessage()
+                }
                 else -> Unit
             }
         }
@@ -276,7 +321,7 @@ fun TransactionDetailScreen(
                     current.amount.formatInr(),
                     style = MaterialTheme.typography.displaySmall,
                     fontWeight = FontWeight.Bold,
-                    color = if (isCredit) ExpenseColors.Income else MaterialTheme.colorScheme.onSurface,
+                    color = if (isCredit) ExpenseColors.Income else ExpenseColors.Coral,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
@@ -290,7 +335,7 @@ fun TransactionDetailScreen(
                 Spacer(Modifier.height(12.dp))
                 MetaRow(stringResource(R.string.label_sender), current.sender ?: "—")
                 Spacer(Modifier.height(12.dp))
-                MetaRow(stringResource(R.string.label_payment), current.paymentMode.name.replace('_', ' '))
+                MetaRow(stringResource(R.string.label_payment), friendlyPaymentMode(current.paymentMode))
                 Spacer(Modifier.height(12.dp))
                 MetaRow(stringResource(R.string.label_reference), current.referenceNumber ?: "—")
                 current.balance?.let {
@@ -391,6 +436,14 @@ fun TransactionDetailScreen(
                             MaterialTheme.colorScheme.error
                         },
                     )
+                    if (ruleNeedsCriteria) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            stringResource(R.string.label_rule_need_criteria),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                     Spacer(Modifier.height(10.dp))
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -398,6 +451,7 @@ fun TransactionDetailScreen(
                     ) {
                         Button(
                             onClick = {
+                                ruleNeedsCriteria = false
                                 viewModel.createLabelRule(
                                     label = labelName.trim().ifEmpty { category },
                                     useSender = useSender,
@@ -418,7 +472,7 @@ fun TransactionDetailScreen(
                             Text(stringResource(R.string.label_rule_save))
                         }
                         OutlinedButton(
-                            onClick = { showLabelForm = false },
+                            onClick = { showLabelForm = false; ruleNeedsCriteria = false },
                             modifier = Modifier
                                 .weight(1f)
                                 .heightIn(min = 48.dp),
@@ -509,7 +563,7 @@ fun TransactionDetailScreen(
                     shape = RoundedCornerShape(14.dp),
                 ) { Text(stringResource(R.string.action_save)) }
                 OutlinedButton(
-                    onClick = { viewModel.delete(current.id, onBack) },
+                    onClick = { confirmDelete = true },
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 52.dp),
@@ -523,6 +577,20 @@ fun TransactionDetailScreen(
         }
     }
 }
+
+@Composable
+private fun friendlyPaymentMode(mode: PaymentMode): String = stringResource(
+    when (mode) {
+        PaymentMode.UPI -> R.string.payment_mode_upi
+        PaymentMode.CARD_CREDIT -> R.string.payment_mode_card_credit
+        PaymentMode.CARD_DEBIT -> R.string.payment_mode_card_debit
+        PaymentMode.NET_BANKING -> R.string.payment_mode_net_banking
+        PaymentMode.WALLET -> R.string.payment_mode_wallet
+        PaymentMode.CASH -> R.string.payment_mode_cash
+        PaymentMode.FASTAG -> R.string.payment_mode_fastag
+        PaymentMode.UNKNOWN -> R.string.payment_mode_unknown
+    },
+)
 
 @Composable
 private fun CriterionRow(

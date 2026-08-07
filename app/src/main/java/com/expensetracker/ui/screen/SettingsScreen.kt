@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,20 +14,27 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -35,11 +43,13 @@ import com.expensetracker.AppFeatures
 import com.expensetracker.R
 import com.expensetracker.data.backup.BackupRepository
 import com.expensetracker.sms.SmsScanResult
+import com.expensetracker.ui.BackupErrorKind
 import com.expensetracker.ui.BackupUiState
 import com.expensetracker.ui.RequiredPermissions
 import com.expensetracker.ui.components.ScreenHeader
 import com.expensetracker.ui.components.StatusPill
 import com.expensetracker.ui.components.SurfaceCard
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 @Composable
@@ -58,7 +68,7 @@ fun SettingsScreen(
     appLockEnabled: Boolean = false,
     appLockBiometricAvailable: Boolean = false,
     appLockBiometricEnabled: Boolean = false,
-    onEnableAppLock: (String) -> Unit = {},
+    onEnableAppLock: (String, (Boolean) -> Unit) -> Unit = { _, onResult -> onResult(false) },
     onChangeAppLockPin: (String, String, (Boolean) -> Unit) -> Unit = { _, _, onResult -> onResult(false) },
     onDisableAppLock: (String, (Boolean) -> Unit) -> Unit = { _, onResult -> onResult(false) },
     onSetAppLockBiometricEnabled: (Boolean) -> Unit = {},
@@ -69,6 +79,10 @@ fun SettingsScreen(
     var smsGranted by remember { mutableStateOf(RequiredPermissions.allGranted(ctx)) }
     var pasteBody by remember { mutableStateOf("") }
     var nameInput by remember(ownerName) { mutableStateOf(ownerName) }
+    var confirmCleanup by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val nameSavedMessage = stringResource(R.string.settings_owner_name_saved)
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -97,6 +111,26 @@ fun SettingsScreen(
         ctx.contentResolver.openInputStream(uri)?.use(onImportBackup)
     }
 
+    if (confirmCleanup) {
+        AlertDialog(
+            onDismissRequest = { confirmCleanup = false },
+            title = { Text(stringResource(R.string.cleanup_confirm_title)) },
+            text = { Text(stringResource(R.string.cleanup_confirm_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmCleanup = false
+                        onPurgeSpam()
+                    },
+                ) { Text(stringResource(R.string.cleanup_spam)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmCleanup = false }) { Text(stringResource(R.string.action_cancel)) }
+            },
+        )
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -139,7 +173,10 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(12.dp))
             Button(
-                onClick = { onOwnerNameChange(nameInput) },
+                onClick = {
+                    onOwnerNameChange(nameInput)
+                    scope.launch { snackbarHostState.showSnackbar(nameSavedMessage) }
+                },
                 enabled = nameInput.isNotBlank() && nameInput.trim() != ownerName,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -267,7 +304,7 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
-                onClick = onPurgeSpam,
+                onClick = { confirmCleanup = true },
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 52.dp),
@@ -316,7 +353,11 @@ fun SettingsScreen(
             when (val state = backupState) {
                 is BackupUiState.Working -> {
                     Spacer(Modifier.height(10.dp))
-                    Text(stringResource(R.string.backup_working), style = MaterialTheme.typography.bodySmall)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.backup_working), style = MaterialTheme.typography.bodySmall)
+                    }
                 }
                 is BackupUiState.Exported -> {
                     Spacer(Modifier.height(10.dp))
@@ -342,7 +383,17 @@ fun SettingsScreen(
                 }
                 is BackupUiState.Error -> {
                     Spacer(Modifier.height(10.dp))
-                    Text(state.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    Text(
+                        stringResource(
+                            if (state.kind == BackupErrorKind.EXPORT) {
+                                R.string.backup_export_failed
+                            } else {
+                                R.string.backup_import_failed
+                            },
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
                 BackupUiState.Idle -> Unit
             }
@@ -358,5 +409,7 @@ fun SettingsScreen(
             )
         }
         Spacer(Modifier.height(24.dp))
+    }
+    SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
 }

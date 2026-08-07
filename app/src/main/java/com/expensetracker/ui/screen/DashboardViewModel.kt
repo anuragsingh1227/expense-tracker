@@ -76,13 +76,22 @@ class DashboardViewModel @Inject constructor(
     /** Persisted "hide rupee amounts" toggle for the Dashboard only. */
     val amountsHidden: StateFlow<Boolean> = _amountsHidden.asStateFlow()
 
+    /** True once either the initial load finished or the user has toggled — guards
+     *  against the slow initial settings read overwriting a fast user tap. */
+    private var amountsHiddenResolved = false
+
     init {
         viewModelScope.launch {
-            _amountsHidden.value = settingsDao.get(AppSettings.AMOUNTS_HIDDEN) == "true"
+            val persisted = settingsDao.get(AppSettings.AMOUNTS_HIDDEN) == "true"
+            if (!amountsHiddenResolved) {
+                _amountsHidden.value = persisted
+                amountsHiddenResolved = true
+            }
         }
     }
 
     fun toggleAmountsHidden() {
+        amountsHiddenResolved = true
         val next = !_amountsHidden.value
         _amountsHidden.value = next
         viewModelScope.launch {

@@ -45,13 +45,15 @@ interface TransactionRepository {
     /** Deletes rows whose raw SMS would no longer pass the transactional gate. */
     suspend fun purgeNonTransactional(parser: SmsParser): Int
     /**
-     * Finds debit↔credit pairs that look like own-account transfers (same amount,
-     * close in time, owner name in either SMS) and deletes both legs. Returns the
-     * number of rows removed.
+     * Finds debit↔credit pairs — restricted to transactions already categorized
+     * [com.expensetracker.sms.parser.Categories.TRANSFER] — that look like
+     * own-account transfers, and deletes both legs. Returns the number of rows
+     * removed.
      *
      * When [ownerNames] is null, uses the name configured in Settings
-     * ([com.expensetracker.data.AppSettings.OWNER_NAME]), falling back to
-     * [SelfTransferLinker.DEFAULT_OWNER_NAMES] if none is set yet.
+     * ([com.expensetracker.data.AppSettings.OWNER_NAME]). If none is set yet,
+     * only reference/UTR-based matches are linked (never falls back to a
+     * hardcoded name — that would misfire for every other user).
      */
     suspend fun reconcileSelfTransfers(ownerNames: List<String>? = null): Int
 }
@@ -137,7 +139,7 @@ class TransactionRepositoryImpl @Inject constructor(
 
     private suspend fun resolveConfiguredOwnerNames(): List<String> {
         val configured = settingsDao.get(AppSettings.OWNER_NAME)?.trim()
-        return if (!configured.isNullOrEmpty()) listOf(configured) else SelfTransferLinker.DEFAULT_OWNER_NAMES
+        return if (!configured.isNullOrEmpty()) listOf(configured) else emptyList()
     }
 }
 

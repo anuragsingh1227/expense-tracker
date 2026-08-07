@@ -179,9 +179,9 @@ fun MetricTile(
             Spacer(Modifier.height(10.dp))
             Text(
                 amount.maskableFormatInr(),
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }
@@ -226,7 +226,7 @@ fun PeriodFilterRow(
             Surface(
                 onClick = { onSelect(period) },
                 modifier = Modifier
-                    .heightIn(min = 44.dp)
+                    .heightIn(min = 48.dp)
                     .semantics { contentDescription = a11y },
                 shape = RoundedCornerShape(999.dp),
                 color = if (selectedNow) {
@@ -402,7 +402,7 @@ fun TransactionListItem(
                 color = amountColor,
             )
             Text(
-                if (isCredit) "Credit" else "Debit",
+                stringResource(if (isCredit) R.string.type_credit else R.string.type_debit),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -423,25 +423,27 @@ fun MetaRow(label: String, value: String, modifier: Modifier = Modifier) {
     }
 }
 
+enum class StatusTone { POSITIVE, NEGATIVE, NEUTRAL }
+
 @Composable
 fun StatusPill(
     text: String,
-    positive: Boolean,
+    tone: StatusTone,
     modifier: Modifier = Modifier,
 ) {
+    val (containerColor, contentColor) = when (tone) {
+        StatusTone.POSITIVE ->
+            MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
+        StatusTone.NEGATIVE ->
+            MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+        StatusTone.NEUTRAL ->
+            MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
+    }
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(999.dp),
-        color = if (positive) {
-            MaterialTheme.colorScheme.secondaryContainer
-        } else {
-            MaterialTheme.colorScheme.errorContainer
-        },
-        contentColor = if (positive) {
-            MaterialTheme.colorScheme.onSecondaryContainer
-        } else {
-            MaterialTheme.colorScheme.onErrorContainer
-        },
+        color = containerColor,
+        contentColor = contentColor,
     ) {
         Text(
             text,
@@ -449,6 +451,12 @@ fun StatusPill(
             style = MaterialTheme.typography.labelMedium,
         )
     }
+}
+
+/** Binary positive/negative shorthand — e.g. Credit vs Debit. */
+@Composable
+fun StatusPill(text: String, positive: Boolean, modifier: Modifier = Modifier) {
+    StatusPill(text, if (positive) StatusTone.POSITIVE else StatusTone.NEGATIVE, modifier)
 }
 
 @Composable

@@ -1,6 +1,7 @@
 package com.expensetracker.ui.screen
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,12 +23,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,6 +59,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.time.Clock
 import javax.inject.Inject
 
@@ -108,9 +114,22 @@ fun TransactionsScreen(
     var query by remember { mutableStateOf("") }
     val state by viewModel.state.collectAsState()
     val clipboard = LocalClipboardManager.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val copiedMessageTemplate = stringResource(R.string.activity_copied_sms)
+    val noSmsMessage = stringResource(R.string.activity_no_sms_to_copy)
 
     var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
     val selectMode = selectedIds.isNotEmpty()
+
+    // If the visible list changes (period/search change, or a purge/reconcile ran)
+    // while some selected rows are no longer shown, drop them so the "N selected"
+    // count and Copy action only ever reflect what's actually still selectable.
+    LaunchedEffect(state.transactions) {
+        val visibleIds = state.transactions.mapTo(mutableSetOf()) { it.id }
+        val pruned = selectedIds.intersect(visibleIds)
+        if (pruned != selectedIds) selectedIds = pruned
+    }
 
     fun toggleSelected(id: Long) {
         selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id
@@ -122,10 +141,16 @@ fun TransactionsScreen(
             .mapNotNull { it.rawSms?.takeIf { body -> body.isNotBlank() } }
         if (selectedBodies.isNotEmpty()) {
             clipboard.setText(AnnotatedString(selectedBodies.joinToString("\n\n")))
+            scope.launch {
+                snackbarHostState.showSnackbar(copiedMessageTemplate.format(selectedBodies.size))
+            }
+        } else {
+            scope.launch { snackbarHostState.showSnackbar(noSmsMessage) }
         }
         selectedIds = emptySet()
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -228,5 +253,7 @@ fun TransactionsScreen(
                 }
             }
         }
+    }
+    SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
 }

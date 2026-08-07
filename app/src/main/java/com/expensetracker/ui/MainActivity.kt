@@ -33,6 +33,7 @@ import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -158,8 +159,13 @@ private fun AppRoot(
     }
 
     val appLockState by appViewModel.appLockState.collectAsState()
-    if (appLockState.loading) {
-        // Avoid flashing app content before we know whether app lock is enabled.
+    // null = still loading from settings; "" = loaded but not set yet.
+    val ownerName = appViewModel.ownerName.collectAsState().value
+
+    if (appLockState.loading || ownerName == null) {
+        // Avoid flashing app content (or skipping onboarding) before we know
+        // whether app lock is enabled and whether a name has been set.
+        AppLoadingGate()
         return
     }
     if (appLockState.enabled && appLockState.locked) {
@@ -173,10 +179,7 @@ private fun AppRoot(
         )
         return
     }
-
-    // null = still loading from settings; "" = loaded but not set yet.
-    val ownerName by appViewModel.ownerName.collectAsState()
-    if (ownerName?.isBlank() == true) {
+    if (ownerName.isBlank()) {
         NameOnboarding(onContinue = { appViewModel.setOwnerName(it) })
         return
     }
@@ -267,7 +270,7 @@ private fun AppRoot(
                     appLockEnabled = settingsAppLockState.enabled,
                     appLockBiometricAvailable = settingsAppLockState.biometricAvailable,
                     appLockBiometricEnabled = settingsAppLockState.biometricEnabled,
-                    onEnableAppLock = { appViewModel.setAppLockPin(it) },
+                    onEnableAppLock = { pin, onResult -> appViewModel.setAppLockPin(pin, onResult) },
                     onChangeAppLockPin = { current, new, onResult ->
                         appViewModel.changeAppLockPin(current, new, onResult)
                     },
@@ -288,6 +291,19 @@ private fun AppRoot(
                 TransactionDetailScreen(transactionId = id, onBack = { nav.popBackStack() })
             }
         }
+    }
+}
+
+/** Shown briefly while Settings (app-lock state, owner name) are read from Room. */
+@Composable
+private fun AppLoadingGate() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center,
+    ) {
+        CircularProgressIndicator()
     }
 }
 

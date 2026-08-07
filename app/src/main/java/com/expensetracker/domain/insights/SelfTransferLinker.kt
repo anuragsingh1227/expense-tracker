@@ -2,12 +2,24 @@ package com.expensetracker.domain.insights
 
 import com.expensetracker.domain.model.Transaction
 import com.expensetracker.domain.model.TransactionType
+import com.expensetracker.sms.parser.Categories
 import java.time.Duration
 
 /**
- * Finds debit↔credit pairs that are own-account transfers (same amount, close in
- * time, owner name like ANURAG in at least one SMS) so both legs can be removed
- * from the ledger / spend totals.
+ * Finds debit↔credit pairs that are own-account transfers so both legs can be
+ * removed from Activity (they're already excluded from spend/income totals via
+ * the `Transfer` category — this only declutters the list).
+ *
+ * Candidates are restricted to transactions the parser already categorized as
+ * [Categories.TRANSFER]. This is the key safety property: an unrelated spend
+ * (e.g. a Food debit) or unrelated income can never be swept up just because it
+ * happens to share an amount and a time window with a real transfer — it's
+ * simply not in the candidate pool.
+ *
+ * Within that pool, a pair sharing the same bank-assigned reference/UTR is an
+ * authoritative match (both legs of one transfer always cite the same
+ * reference) and is preferred over the weaker "owner name mentioned somewhere"
+ * heuristic, which is used only as a fallback for legs without a reference.
  */
 object SelfTransferLinker {
 
@@ -31,28 +43,33 @@ object SelfTransferLinker {
         ownerNames: List<String> = DEFAULT_OWNER_NAMES,
         window: Duration = MATCH_WINDOW,
     ): List<PairMatch> {
-        if (ownerNames.isEmpty()) return emptyList()
         val nameHints = ownerNames.map { it.trim().uppercase() }.filter { it.length >= 2 }
-        if (nameHints.isEmpty()) return emptyList()
 
-        val debits = transactions
-            .filter { it.type == TransactionType.DEBIT && !it.manuallyEdited }
-            .sortedBy { it.timestamp }
-        val credits = transactions
-            .filter { it.type == TransactionType.CREDIT && !it.manuallyEdited }
-            .sortedBy { it.timestamp }
-            .toMutableList()
+        val candidates = transactions.filter { it.category == Categories.TRANSFER && !it.manuallyEdited }
+        val debits = candidates.filter { it.type == TransactionType.DEBIT }.sortedBy { it.timestamp }
+        val credits = candidates.filter { it.type == TransactionType.CREDIT }.sortedBy { it.timestamp }
 
-        val pairs = mutableListOf<PairMatch>()
         val usedCreditIds = mutableSetOf<Long>()
+        val pairs = mutableListOf<PairMatch>()
 
         for (debit in debits) {
-            val match = credits.firstOrNull { credit ->
-                credit.id !in usedCreditIds &&
-                    amountsEqual(debit, credit) &&
-                    withinWindow(debit, credit, window) &&
-                    mentionsOwner(debit, credit, nameHints)
-            } ?: continue
+            val candidatesForDebit = credits.filter { credit ->
+                credit.id !in usedCreditIds && amountsEqual(debit, credit) && withinWindow(debit, credit, window)
+            }
+            if (candidatesForDebit.isEmpty()) continue
+
+            // Prefer a shared reference/UTR — authoritative, no ambiguity.
+            val referenceMatch = debit.referenceNumber
+                ?.takeIf { it.isNotBlank() }
+                ?.let { ref -> candidatesForDebit.firstOrNull { it.referenceNumber == ref } }
+
+            val match = referenceMatch
+                ?: candidatesForDebit
+                    .filter { nameHints.isNotEmpty() && mentionsOwner(debit, it, nameHints) }
+                    // Weaker signal: prefer the closest-in-time candidate, not just the first.
+                    .minByOrNull { Duration.between(debit.timestamp, it.timestamp).abs() }
+                ?: continue
+
             usedCreditIds += match.id
             pairs += PairMatch(debit = debit, credit = match)
         }

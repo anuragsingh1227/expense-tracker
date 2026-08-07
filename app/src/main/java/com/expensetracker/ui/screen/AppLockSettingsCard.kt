@@ -28,6 +28,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.expensetracker.R
 import com.expensetracker.ui.components.StatusPill
+import com.expensetracker.ui.components.StatusTone
 import com.expensetracker.ui.components.SurfaceCard
 
 private enum class AppLockFormMode { NONE, SETUP, CHANGE, DISABLE }
@@ -43,7 +44,7 @@ fun AppLockSettingsCard(
     enabled: Boolean,
     biometricAvailable: Boolean,
     biometricEnabled: Boolean,
-    onEnableWithPin: (String) -> Unit,
+    onEnableWithPin: (pin: String, onResult: (Boolean) -> Unit) -> Unit,
     onChangePin: (current: String, new: String, onResult: (Boolean) -> Unit) -> Unit,
     onDisable: (current: String, onResult: (Boolean) -> Unit) -> Unit,
     onSetBiometricEnabled: (Boolean) -> Unit,
@@ -59,6 +60,7 @@ fun AppLockSettingsCard(
     val errPinTooShort = stringResource(R.string.settings_applock_pin_too_short)
     val errPinMismatch = stringResource(R.string.settings_applock_pin_mismatch)
     val errPinIncorrect = stringResource(R.string.settings_applock_pin_incorrect)
+    val errSaveFailed = stringResource(R.string.settings_applock_save_failed)
 
     fun reset() {
         mode = AppLockFormMode.NONE
@@ -80,7 +82,7 @@ fun AppLockSettingsCard(
                     text = stringResource(
                         if (enabled) R.string.settings_applock_status_on else R.string.settings_applock_status_off,
                     ),
-                    positive = enabled,
+                    tone = if (enabled) StatusTone.POSITIVE else StatusTone.NEUTRAL,
                 )
                 Spacer(Modifier.height(12.dp))
                 if (enabled) {
@@ -145,8 +147,10 @@ fun AppLockSettingsCard(
                             else -> null
                         }
                         if (errorMessage == null) {
-                            onEnableWithPin(pinA)
-                            reset()
+                            // Only close the form once the PIN is actually persisted —
+                            // otherwise a process death mid-write could leave the user
+                            // thinking the lock is on when it never got saved.
+                            onEnableWithPin(pinA) { ok -> if (ok) reset() else errorMessage = errSaveFailed }
                         }
                     },
                 )

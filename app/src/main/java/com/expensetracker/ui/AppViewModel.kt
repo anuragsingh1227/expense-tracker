@@ -31,12 +31,15 @@ import java.time.Clock
 import java.time.Instant
 import javax.inject.Inject
 
+enum class BackupErrorKind { EXPORT, IMPORT }
+
 sealed class BackupUiState {
     data object Idle : BackupUiState()
     data object Working : BackupUiState()
     data class Exported(val bytes: Int) : BackupUiState()
     data class Imported(val result: BackupImportResult) : BackupUiState()
-    data class Error(val message: String) : BackupUiState()
+    /** Never carries the raw exception message — the UI shows a friendly, localized string. */
+    data class Error(val kind: BackupErrorKind) : BackupUiState()
 }
 
 data class SmsTextImportResult(
@@ -121,14 +124,23 @@ class AppViewModel @Inject constructor(
     }
 
     /** First-time setup or re-enabling after it was off — no current PIN to check. */
-    fun setAppLockPin(pin: String) {
+    fun setAppLockPin(pin: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
-            val salt = PinHasher.generateSalt()
-            val hash = PinHasher.hash(pin, salt)
-            settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_PIN_SALT, salt))
-            settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_PIN_HASH, hash))
-            settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_ENABLED, "true"))
+            val (salt, hash) = withContext(Dispatchers.Default) {
+                val salt = PinHasher.generateSalt()
+                salt to PinHasher.hash(pin, salt)
+            }
+            // Single transaction: a process death here can never pair a new
+            // salt with a stale hash, or half-enable the lock.
+            settingsDao.putAll(
+                listOf(
+                    SettingsEntity(AppSettings.APP_LOCK_PIN_SALT, salt),
+                    SettingsEntity(AppSettings.APP_LOCK_PIN_HASH, hash),
+                    SettingsEntity(AppSettings.APP_LOCK_ENABLED, "true"),
+                ),
+            )
             _appLockState.value = _appLockState.value.copy(enabled = true, locked = false, pinError = false)
+            onResult(true)
         }
     }
 
@@ -138,10 +150,16 @@ class AppViewModel @Inject constructor(
                 onResult(false)
                 return@launch
             }
-            val salt = PinHasher.generateSalt()
-            val hash = PinHasher.hash(newPin, salt)
-            settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_PIN_SALT, salt))
-            settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_PIN_HASH, hash))
+            val (salt, hash) = withContext(Dispatchers.Default) {
+                val salt = PinHasher.generateSalt()
+                salt to PinHasher.hash(newPin, salt)
+            }
+            settingsDao.putAll(
+                listOf(
+                    SettingsEntity(AppSettings.APP_LOCK_PIN_SALT, salt),
+                    SettingsEntity(AppSettings.APP_LOCK_PIN_HASH, hash),
+                ),
+            )
             onResult(true)
         }
     }
@@ -152,8 +170,12 @@ class AppViewModel @Inject constructor(
                 onResult(false)
                 return@launch
             }
-            settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_ENABLED, "false"))
-            settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_BIOMETRIC_ENABLED, "false"))
+            settingsDao.putAll(
+                listOf(
+                    SettingsEntity(AppSettings.APP_LOCK_ENABLED, "false"),
+                    SettingsEntity(AppSettings.APP_LOCK_BIOMETRIC_ENABLED, "false"),
+                ),
+            )
             _appLockState.value = _appLockState.value.copy(
                 enabled = false,
                 biometricEnabled = false,
@@ -171,11 +193,21 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    /** Attempt to unlock the lock screen with a typed PIN. */
+    /**
+     * Attempt to unlock the lock screen with a typed PIN. If the app was
+     * backgrounded again while the PIN was being verified, stay locked even on
+     * a correct PIN — otherwise a slow verification (PBKDF2) racing a Home-button
+     * press could unlock the app into the background/recents preview.
+     */
     fun submitUnlockPin(pin: String) {
+        val verifyStartedAt = AppForegroundTracker.backgroundedAtMillis.value
         viewModelScope.launch {
             val ok = verifyStoredPin(pin)
-            _appLockState.value = _appLockState.value.copy(locked = !ok, pinError = !ok)
+            val backgroundedDuringVerify = AppForegroundTracker.backgroundedAtMillis.value != verifyStartedAt
+            _appLockState.value = _appLockState.value.copy(
+                locked = !ok || backgroundedDuringVerify,
+                pinError = !ok,
+            )
         }
     }
 
@@ -192,7 +224,7 @@ class AppViewModel @Inject constructor(
     private suspend fun verifyStoredPin(pin: String): Boolean {
         val salt = settingsDao.get(AppSettings.APP_LOCK_PIN_SALT) ?: return false
         val hash = settingsDao.get(AppSettings.APP_LOCK_PIN_HASH) ?: return false
-        return PinHasher.matches(pin, salt, hash)
+        return withContext(Dispatchers.Default) { PinHasher.matches(pin, salt, hash) }
     }
 
     private val _scanning = MutableStateFlow(false)
@@ -226,7 +258,9 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             _scanning.value = true
             try {
-                _lastScan.value = scanner.scan(forceFullLookback = forceFullLookback)
+                _lastScan.value = withContext(Dispatchers.IO) {
+                    scanner.scan(forceFullLookback = forceFullLookback)
+                }
             } finally {
                 _scanning.value = false
             }
@@ -302,7 +336,7 @@ class AppViewModel @Inject constructor(
                 }
                 _backupState.value = BackupUiState.Exported(json.length)
             } catch (t: Throwable) {
-                _backupState.value = BackupUiState.Error(t.message ?: "Backup failed")
+                _backupState.value = BackupUiState.Error(BackupErrorKind.EXPORT)
             }
         }
     }
@@ -317,7 +351,7 @@ class AppViewModel @Inject constructor(
                 val result = withContext(Dispatchers.IO) { backupRepository.importJson(json) }
                 _backupState.value = BackupUiState.Imported(result)
             } catch (t: Throwable) {
-                _backupState.value = BackupUiState.Error(t.message ?: "Restore failed")
+                _backupState.value = BackupUiState.Error(BackupErrorKind.IMPORT)
             }
         }
     }

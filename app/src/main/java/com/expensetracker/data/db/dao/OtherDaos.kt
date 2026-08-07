@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import com.expensetracker.data.db.entity.BudgetEntity
 import com.expensetracker.data.db.entity.CategoryEntity
 import com.expensetracker.data.db.entity.LabelRuleEntity
@@ -66,4 +67,14 @@ interface SettingsDao {
 
     @Query("SELECT value FROM settings WHERE key = :key")
     suspend fun get(key: String): String?
+
+    /**
+     * Writes every entity in a single DB transaction so a process death
+     * mid-write can never leave e.g. a new PIN salt paired with the old hash
+     * (which would otherwise lock the user out permanently).
+     */
+    @Transaction
+    suspend fun putAll(entities: List<SettingsEntity>) {
+        entities.forEach { put(it) }
+    }
 }

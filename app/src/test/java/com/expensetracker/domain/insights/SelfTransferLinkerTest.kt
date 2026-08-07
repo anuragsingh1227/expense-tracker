@@ -47,13 +47,44 @@ class SelfTransferLinkerTest {
     }
 
     @Test
-    fun `does not pair when owner name is absent`() {
+    fun `does not pair when owner name is absent and reference differs`() {
         val debit = tx(1, SampleSms.AXIS_DEBIT_INR_NEFT, "VM-AXISBK", t0)
+        // Different reference than the debit's AXOMB16602145999, and no owner name —
+        // same amount + window alone must not be enough to pair (would delete an
+        // unrelated same-amount transaction otherwise).
+        val creditBody =
+            "Credit INR 17383.00\nICICI Bank A/c XX293\n15-06-26 20:45:10\nNEFT/MB/HDFCB99999999999/V"
+        val credit = tx(2, creditBody, "AD-ICICIB", t0.plus(2, ChronoUnit.MINUTES))
+
+        assertThat(SelfTransferLinker.findPairs(listOf(debit, credit))).isEmpty()
+    }
+
+    @Test
+    fun `pairs on shared reference alone even without an owner name`() {
+        val debit = tx(1, SampleSms.AXIS_DEBIT_INR_NEFT, "VM-AXISBK", t0)
+        // Same reference as the debit (AXOMB16602145999), no owner name mentioned —
+        // a shared bank-assigned reference is authoritative on its own.
         val creditBody =
             "Credit INR 17383.00\nICICI Bank A/c XX293\n15-06-26 20:45:10\nNEFT/MB/AXOMB16602145999/V"
         val credit = tx(2, creditBody, "AD-ICICIB", t0.plus(2, ChronoUnit.MINUTES))
 
-        assertThat(SelfTransferLinker.findPairs(listOf(debit, credit))).isEmpty()
+        val pairs = SelfTransferLinker.findPairs(listOf(debit, credit), ownerNames = emptyList())
+        assertThat(pairs).hasSize(1)
+        assertThat(SelfTransferLinker.idsToRemove(pairs)).containsExactly(1L, 2L)
+    }
+
+    @Test
+    fun `never pairs a transaction outside the Transfer category, even with matching amount, window, and name`() {
+        // A real Food spend (Zomato) that happens to share amount/time/name with an
+        // unrelated transfer must never be swept up — it isn't categorized Transfer.
+        val foodSpend = tx(1, SampleSms.ICICI_CARD_SPEND_WITH_DISPUTE, "AD-ICICIB", t0)
+        assertThat(foodSpend.category).isNotEqualTo(Categories.TRANSFER)
+
+        val creditBody =
+            "Credit INR ${foodSpend.amount.amount}\nICICI Bank A/c XX293\n15-06-26 20:45:10\nNEFT ANURAG"
+        val credit = tx(2, creditBody, "AD-ICICIB", foodSpend.timestamp.plus(1, ChronoUnit.HOURS))
+
+        assertThat(SelfTransferLinker.findPairs(listOf(foodSpend, credit))).isEmpty()
     }
 
     @Test
