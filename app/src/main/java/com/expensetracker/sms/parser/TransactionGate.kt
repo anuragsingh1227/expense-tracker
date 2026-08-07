@@ -99,6 +99,8 @@ object TransactionGate {
         "RECEIVED FROM", "RECEIVED RS", "DEPOSITED", "CR AMT", "CR/",
         // Refund / reversal SMS often skip "credited" entirely.
         "REFUNDED", "REFUND OF", "HAS BEEN REVERSED", "BEEN REVERSED", "REVERSED TO", "REVERSAL OF",
+        // IDFC-style "Rs X received in your Account … from <vpa>" templates.
+        "RECEIVED IN YOUR", "RECEIVED IN A/C", "RECEIVED IN ACCOUNT", "YOU HAVE RECEIVED",
     )
 
     fun isTransactional(body: String): Boolean {

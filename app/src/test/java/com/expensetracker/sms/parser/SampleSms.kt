@@ -128,6 +128,10 @@ object SampleSms {
     const val UPI_REF_ONLY =
         "Rs 1,000.00 debited from A/c XX1234 on 05-Aug-26 for UPI/123456789012. Avl Bal Rs 8,200.00"
 
+    /** IDFC-style received-payment — money IN, must be CREDIT + Transfer (never spend/income). */
+    const val IDFC_RECEIVED_UPI =
+        "Rs 1,000.00 received in your IDFC FIRST Bank Account XX293 from anurag singh-1@okicici on 07-08-26. Call 180010888 for dispute. UPI: 807123456789"
+
     /** Multi-month batch for ledger / paste-import tests (blank-line separated). */
     const val LEDGER_BATCH = """
 INR 52000.00 credited to A/c XXXX9876 on 01-Jul-26 by NEFT Salary. Avl Bal Rs 80,000.00

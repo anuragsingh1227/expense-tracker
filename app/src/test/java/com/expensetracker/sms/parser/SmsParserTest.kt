@@ -233,6 +233,14 @@ class SmsParserTest {
     }
 
     @Test
+    fun `received UPI payment is CREDIT Transfer not spend and not income`() {
+        val tx = parser.parse(raw("JM-IDFCBK", SampleSms.IDFC_RECEIVED_UPI))!!
+        assertThat(tx.type).isEqualTo(TransactionType.CREDIT)
+        assertThat(tx.category).isEqualTo(Categories.TRANSFER)
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("1000.00"))
+    }
+
+    @Test
     fun `amount extractor skips balance and picks debit amount`() {
         val body =
             "Avl Bal Rs 12,340.55. Rs 245.00 debited from a/c XXXX1234 at AMAZON via UPI. UPI Ref 401234567890"

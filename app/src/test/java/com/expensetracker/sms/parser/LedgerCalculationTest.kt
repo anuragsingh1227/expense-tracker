@@ -194,6 +194,16 @@ class LedgerCalculationTest {
     }
 
     @Test
+    fun `received UPI payment never counts as spend or income`() {
+        val received = parser.parse(RawSms("JM-IDFCBK", SampleSms.IDFC_RECEIVED_UPI, fallback))!!
+        assertThat(LedgerBuckets.isSpend(received)).isFalse()
+        assertThat(LedgerBuckets.isIncome(received)).isFalse()
+        assertThat(LedgerBuckets.isTransfer(received)).isTrue()
+        assertThat(LedgerBuckets.spend(listOf(received)).amount).isEqualTo(BigDecimal.ZERO.setScale(2))
+        assertThat(LedgerBuckets.income(listOf(received)).amount).isEqualTo(BigDecimal.ZERO.setScale(2))
+    }
+
+    @Test
     fun `credit card purchase is spend once and its auto-pay pair is Transfer not double-counted`() {
         val purchase = parser.parse(RawSms("AD-ICICIB", SampleSms.ICICI_CARD_SPEND_WITH_DISPUTE, fallback))!!
         val billDebit = parser.parse(RawSms("VM-HDFCBK", SampleSms.PAYMENT_TO_CREDIT_CARD_TRANSFER, fallback))!!
