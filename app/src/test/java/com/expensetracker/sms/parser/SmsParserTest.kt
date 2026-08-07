@@ -247,6 +247,24 @@ class SmsParserTest {
     }
 
     @Test
+    fun `Axis Debit INR NEFT compact template parses as Transfer debit`() {
+        val tx = parser.parse(raw("VM-AXISBK", SampleSms.AXIS_DEBIT_INR_NEFT))!!
+        assertThat(tx.type).isEqualTo(TransactionType.DEBIT)
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("17383.00"))
+        assertThat(tx.category).isEqualTo(Categories.TRANSFER)
+        assertThat(tx.accountLast4).isEqualTo("8291")
+        assertThat(tx.referenceNumber).isEqualTo("AXOMB16602145999")
+    }
+
+    @Test
+    fun `Axis Debit INR CRD-PMNT is Transfer not spend`() {
+        val tx = parser.parse(raw("VM-AXISBK", SampleSms.AXIS_DEBIT_INR_CRD_PMNT))!!
+        assertThat(tx.type).isEqualTo(TransactionType.DEBIT)
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("3868.40"))
+        assertThat(tx.category).isEqualTo(Categories.TRANSFER)
+    }
+
+    @Test
     fun `amount extractor skips balance and picks debit amount`() {
         val body =
             "Avl Bal Rs 12,340.55. Rs 245.00 debited from a/c XXXX1234 at AMAZON via UPI. UPI Ref 401234567890"

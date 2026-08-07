@@ -63,6 +63,9 @@ class SmsInboxScanner @Inject constructor(
                     if (repository.insertIfNew(tx)) inserted++ else skipped++
                 }
 
+                // Drop debit↔credit pairs that are own-account moves (owner name in SMS).
+                repository.reconcileSelfTransfers()
+
                 settingsDao.put(SettingsEntity(AppSettings.LAST_SMS_SCAN_MILLIS, nowMillis.toString()))
                 settingsDao.put(SettingsEntity(AppSettings.INITIAL_BACKFILL_DONE, "true"))
                 return SmsScanResult(

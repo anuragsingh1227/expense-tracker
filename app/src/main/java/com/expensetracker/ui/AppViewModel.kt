@@ -120,6 +120,7 @@ class AppViewModel @Inject constructor(
                     }
                     if (transactionRepository.insertIfNew(tx)) inserted++ else skipped++
                 }
+                transactionRepository.reconcileSelfTransfers()
             }
             _textImportResult.value = SmsTextImportResult(
                 examined = chunks.size,
@@ -137,7 +138,9 @@ class AppViewModel @Inject constructor(
     fun purgeSpam() {
         viewModelScope.launch {
             val removed = withContext(Dispatchers.IO) {
-                transactionRepository.purgeNonTransactional(parser)
+                val spam = transactionRepository.purgeNonTransactional(parser)
+                val self = transactionRepository.reconcileSelfTransfers()
+                spam + self
             }
             _cleanupRemoved.value = removed
         }

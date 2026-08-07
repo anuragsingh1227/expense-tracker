@@ -136,6 +136,18 @@ object SampleSms {
     const val AUTOPAY_WILL_BE_DEBITED_NOTICE =
         "Dear Customer, INR 1,631.00 will be debited from Account XX293 on 07-08-25 towards your ICICI Bank Credit Card XX1014. Auto Pay is activated for your credit card account. RMHBK S"
 
+    /** Axis compact multi-line NEFT debit — must parse (was dropped by gate). */
+    const val AXIS_DEBIT_INR_NEFT =
+        "Debit INR 17383.00\nAxis Bank A/c XX8291\n15-06-26 20:43:26\nNEFT/MB/AXOMB16602145999/V\nWhatsApp BAL to 917036165000\nNot You? SMS BLOCKALL CustID to 919951860002"
+
+    /** Axis compact card-payment debit from savings — Transfer, not spend. */
+    const val AXIS_DEBIT_INR_CRD_PMNT =
+        "Debit INR 3868.40\nAxis Bank A/c XX8291\n02-07-26 10:41:54\nCRD-PMNT-530562****0887\nWhatsApp BAL to 917036165000\nNot You? SMS BLOCKALL CustID to 919951860002"
+
+    /** Matching credit leg of an own-account NEFT (owner name ANURAG in body). */
+    const val OWN_ACCOUNT_NEFT_CREDIT_ANURAG =
+        "Credit INR 17383.00\nICICI Bank A/c XX293\n15-06-26 20:45:10\nNEFT/MB/AXOMB16602145999/V ANURAG SINGH"
+
     /** Multi-month batch for ledger / paste-import tests (blank-line separated). */
     const val LEDGER_BATCH = """
 INR 52000.00 credited to A/c XXXX9876 on 01-Jul-26 by NEFT Salary. Avl Bal Rs 80,000.00

@@ -194,6 +194,11 @@ class SmsParser(
             upper.contains("RECHARGE") -> Categories.RECHARGE
             upper.contains("ELECTRICITY") || upper.contains("WATER BILL") || upper.contains("GAS BILL") ->
                 Categories.UTILITIES
+            // One-sided NEFT/IMPS/RTGS account move with no known merchant —
+            // account-to-account transfer: shown in Activity, excluded from spend.
+            (upper.contains("NEFT") || upper.contains("IMPS") || upper.contains("RTGS")) &&
+                (upper.contains("A/C") || upper.contains("ACCT") || upper.contains("ACCOUNT")) ->
+                Categories.TRANSFER
             type == TransactionType.CREDIT -> Categories.TRANSFER
             else -> Categories.OTHERS
         }
@@ -207,6 +212,8 @@ class SmsParser(
         if (upper.contains("BILLPAY") || upper.contains("BILL PAY")) return true
         if (upper.contains("CREDIT CARD PAYMENT") || upper.contains("CC PAYMENT")) return true
         if (upper.contains("CREDIT CARD BILL") || upper.contains("CC BILL")) return true
+        // Axis compact card-bill template: "CRD-PMNT-530562****0887"
+        if (upper.contains("CRD-PMNT") || upper.contains("CRD PMNT") || upper.contains("CRDPMNT")) return true
         if (upper.contains("TOWARDS") && upper.contains("CARD")) return true
         if (upper.contains("PAYMENT TO") && (upper.contains("CREDIT CARD") || upper.contains(" CC "))) return true
         if (upper.contains("CREDITED TO YOUR CARD") || upper.contains("CREDITED TO YOUR CC")) return true
@@ -217,6 +224,13 @@ class SmsParser(
             return true
         }
         if (Regex("""ACCT\s+XX\d+\s+DEBITED.*ACCT\s+XX\d+\s+CREDITED""").containsMatchIn(upper)) {
+            return true
+        }
+        // Owner-name hint (e.g. ANURAG) on a bank transfer SMS → own-account move.
+        if (OWNER_NAME_HINT.containsMatchIn(upper) &&
+            (upper.contains("NEFT") || upper.contains("IMPS") || upper.contains("RTGS") ||
+                upper.contains("TRANSFERRED") || upper.contains("TRANSFER"))
+        ) {
             return true
         }
         return false
@@ -294,9 +308,15 @@ class SmsParser(
             Regex("""(?i)\b(?:dispute|helpline|customer\s+care|toll\s*free)\b""")
         private val PHONE_HEAVY_MERCHANT =
             Regex("""(?i)(?:\d[\d\s/-]{6,}\d)|(?:\b\d{4,}[-/]\d{4,}\b)""")
+        /** Owner first-name hint used to spot own-account transfers in SMS text. */
+        private val OWNER_NAME_HINT = Regex("""\bANURAG\b""", RegexOption.IGNORE_CASE)
         private val REFERENCE_PATTERNS = listOf(
             Regex("""(?i)(?:ref(?:erence)?(?:\s*no)?\.?|txn(?:\s*id)?\.?|utr)[:\s#]*([A-Z0-9]{6,})"""),
             Regex("""(?i)UPI(?:\s*ref)?[:\s]*([0-9]{9,})"""),
+            // Axis NEFT/IMPS compact template: "NEFT/MB/AXOMB16602145999/V"
+            Regex("""(?i)(?:NEFT|IMPS|RTGS)/[A-Z]{1,3}/([A-Z0-9]{8,})"""),
+            // Axis card-payment compact template: "CRD-PMNT-530562****0887"
+            Regex("""(?i)CRD[- ]?PMNT[- ]?([A-Z0-9*]{6,})"""),
         )
         private val BALANCE_PATTERN = Regex(
             """(?i)(?:avl\.?\s*bal|available\s*balance|bal(?:ance)?)[:\s]*(?:rs\.?|inr|₹)?\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)""",

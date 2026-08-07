@@ -5,6 +5,7 @@ import com.expensetracker.data.db.dao.CategoryTotal
 import com.expensetracker.data.db.dao.TransactionDao
 import com.expensetracker.data.db.entity.TransactionEntity
 import com.expensetracker.domain.insights.CategoryMonthSpend
+import com.expensetracker.domain.insights.SelfTransferLinker
 import com.expensetracker.domain.model.Money
 import com.expensetracker.domain.model.PaymentMode
 import com.expensetracker.domain.model.Transaction
@@ -41,6 +42,12 @@ interface TransactionRepository {
     fun searchBetween(query: String?, from: Instant, to: Instant): Flow<List<Transaction>>
     /** Deletes rows whose raw SMS would no longer pass the transactional gate. */
     suspend fun purgeNonTransactional(parser: SmsParser): Int
+    /**
+     * Finds debit↔credit pairs that look like own-account transfers (same amount,
+     * close in time, owner name like ANURAG in either SMS) and deletes both legs.
+     * Returns the number of rows removed.
+     */
+    suspend fun reconcileSelfTransfers(ownerNames: List<String> = SelfTransferLinker.DEFAULT_OWNER_NAMES): Int
 }
 
 @Singleton
@@ -110,6 +117,14 @@ class TransactionRepositoryImpl @Inject constructor(
         if (spamIds.isEmpty()) return 0
         spamIds.chunked(200).forEach { dao.deleteByIds(it) }
         return spamIds.size
+    }
+
+    override suspend fun reconcileSelfTransfers(ownerNames: List<String>): Int {
+        val all = dao.getAllOnce().map { it.toDomain() }
+        val ids = SelfTransferLinker.idsToRemove(SelfTransferLinker.findPairs(all, ownerNames))
+        if (ids.isEmpty()) return 0
+        ids.chunked(200).forEach { dao.deleteByIds(it) }
+        return ids.size
     }
 }
 

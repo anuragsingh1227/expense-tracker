@@ -99,6 +99,9 @@ object TransactionGate {
         // ICICI card-spend templates that skip "debited" entirely.
         "IS USED FOR", "HAS BEEN USED", "BEEN USED FOR", "USED FOR RS", "USED FOR INR",
         "WAS USED FOR", "CARD USED",
+        // Axis compact multi-line template: "Debit INR 17383.00\nAxis Bank A/c XX…"
+        "DEBIT INR", "DEBIT RS", "DEBIT ₹",
+        "TRANSFERRED TO",
     )
     private val STRONG_CREDIT = listOf(
         "HAS BEEN CREDITED", "BEEN CREDITED", "CREDITED WITH", "CREDITED TO", "CREDITED",
@@ -107,6 +110,8 @@ object TransactionGate {
         "REFUNDED", "REFUND OF", "HAS BEEN REVERSED", "BEEN REVERSED", "REVERSED TO", "REVERSAL OF",
         // IDFC-style "Rs X received in your Account … from <vpa>" templates.
         "RECEIVED IN YOUR", "RECEIVED IN A/C", "RECEIVED IN ACCOUNT", "YOU HAVE RECEIVED",
+        // Axis compact multi-line template: "Credit INR 5000.00\nAxis Bank A/c XX…"
+        "CREDIT INR", "CREDIT RS", "CREDIT ₹",
     )
 
     fun isTransactional(body: String): Boolean {
