@@ -3,6 +3,8 @@ package com.expensetracker.ui.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +31,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -303,11 +306,15 @@ fun EmptyState(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TransactionListItem(
     tx: Transaction,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    selectMode: Boolean = false,
+    selected: Boolean = false,
+    onLongClick: () -> Unit = {},
 ) {
     val isCredit = tx.type == TransactionType.CREDIT
     val sign = if (isCredit) "+" else "−"
@@ -321,19 +328,30 @@ fun TransactionListItem(
             .fillMaxWidth()
             .heightIn(min = 64.dp)
             .clip(RowShape)
-            .background(MaterialTheme.colorScheme.surface)
+            .background(
+                if (selected) {
+                    MaterialTheme.colorScheme.secondaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surface
+                },
+            )
             .semantics {
                 contentDescription = a11y
                 role = Role.Button
             }
-            .clickable(
+            .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = ripple(),
                 onClick = onClick,
+                onLongClick = onLongClick,
             )
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (selectMode) {
+            Checkbox(checked = selected, onCheckedChange = null)
+            Spacer(Modifier.width(4.dp))
+        }
         Box(
             modifier = Modifier
                 .size(42.dp)
@@ -558,6 +576,9 @@ fun StackedMonthBars(
     val legendCats = columns
         .flatMap { it.segments.map { seg -> seg.category } }
         .distinct()
+    // Bar height reflects each month's actual total, not just its category mix —
+    // the biggest-spend month fills the full track; smaller months are shorter.
+    val maxTotal = columns.maxOfOrNull { it.total.amount.toDouble() }?.coerceAtLeast(0.01) ?: 0.01
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
@@ -580,22 +601,33 @@ fun StackedMonthBars(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(6.dp))
-                    Column(
+                    val heightFraction = (col.total.amount.toDouble() / maxTotal).toFloat().coerceIn(0f, 1f)
+                    val barHeight = (88f * heightFraction).coerceAtLeast(
+                        if (col.total.amount.signum() > 0) 3f else 0f,
+                    )
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(88.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        verticalArrangement = Arrangement.Bottom,
+                            .height(88.dp),
+                        contentAlignment = Alignment.BottomCenter,
                     ) {
-                        col.segments.asReversed().forEach { seg ->
-                            val colorIndex = legendCats.indexOf(seg.category).coerceAtLeast(0)
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height((88f * seg.fraction).dp.coerceAtLeast(3.dp))
-                                    .background(palette[colorIndex % palette.size]),
-                            )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(barHeight.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            verticalArrangement = Arrangement.Bottom,
+                        ) {
+                            col.segments.asReversed().forEach { seg ->
+                                val colorIndex = legendCats.indexOf(seg.category).coerceAtLeast(0)
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height((barHeight * seg.fraction).dp.coerceAtLeast(3.dp))
+                                        .background(palette[colorIndex % palette.size]),
+                                )
+                            }
                         }
                     }
                     Spacer(Modifier.height(6.dp))

@@ -208,6 +208,7 @@ fun TransactionDetailScreen(
         }
 
         var category by remember(current.id, current.category) { mutableStateOf(current.category) }
+        var type by remember(current.id, current.type) { mutableStateOf(current.type) }
         var notes by remember(current.id) { mutableStateOf(current.notes.orEmpty()) }
         var rememberMerchant by remember(current.id) { mutableStateOf(true) }
 
@@ -255,7 +256,7 @@ fun TransactionDetailScreen(
         val matchesPreview = viewModel.previewMatches(
             useSender, senderContains, useBody, bodyContains, useMerchant, merchantContains,
         )
-        val isCredit = current.type == TransactionType.CREDIT
+        val isCredit = type == TransactionType.CREDIT
 
         Column(
             modifier = Modifier
@@ -429,6 +430,20 @@ fun TransactionDetailScreen(
                 }
             }
 
+            Text(stringResource(R.string.label_type), style = MaterialTheme.typography.titleMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = type == TransactionType.DEBIT,
+                    onClick = { type = TransactionType.DEBIT },
+                    label = { Text(stringResource(R.string.type_debit)) },
+                )
+                FilterChip(
+                    selected = type == TransactionType.CREDIT,
+                    onClick = { type = TransactionType.CREDIT },
+                    label = { Text(stringResource(R.string.type_credit)) },
+                )
+            }
+
             Text(stringResource(R.string.label_category), style = MaterialTheme.typography.titleMedium)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -483,6 +498,7 @@ fun TransactionDetailScreen(
                             current.copy(
                                 category = category.trim().ifEmpty { current.category },
                                 notes = notes.trim().ifEmpty { null },
+                                type = type,
                             ),
                             rememberForMerchant = rememberMerchant,
                         )

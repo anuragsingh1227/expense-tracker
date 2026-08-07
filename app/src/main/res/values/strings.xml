@@ -77,8 +77,11 @@
     <string name="action_back">Back</string>
     <string name="action_save">Save</string>
     <string name="action_delete">Delete</string>
+    <string name="action_copy_sms">Copy SMS</string>
+    <string name="selection_count">%1$d selected</string>
     <string name="type_credit">Credit</string>
     <string name="type_debit">Debit</string>
+    <string name="label_type">Type</string>
     <string name="label_bank">Bank</string>
     <string name="label_payment">Payment mode</string>
     <string name="label_reference">Reference</string>
