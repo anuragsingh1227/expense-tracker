@@ -2,8 +2,11 @@ package com.expensetracker.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.expensetracker.data.AppSettings
 import com.expensetracker.data.backup.BackupImportResult
 import com.expensetracker.data.backup.BackupRepository
+import com.expensetracker.data.db.dao.SettingsDao
+import com.expensetracker.data.db.entity.SettingsEntity
 import com.expensetracker.data.repository.TransactionRepository
 import com.expensetracker.sms.SmsInboxScanner
 import com.expensetracker.sms.SmsScanResult
@@ -42,12 +45,33 @@ class AppViewModel @Inject constructor(
     private val scanner: SmsInboxScanner,
     private val backupRepository: BackupRepository,
     private val transactionRepository: TransactionRepository,
+    private val settingsDao: SettingsDao,
     private val parser: SmsParser,
     private val clock: Clock,
 ) : ViewModel() {
 
     private val _lastScan = MutableStateFlow<SmsScanResult?>(null)
     val lastScan: StateFlow<SmsScanResult?> = _lastScan.asStateFlow()
+
+    /** null while loading; empty string once loaded if no name is set yet. */
+    private val _ownerName = MutableStateFlow<String?>(null)
+    val ownerName: StateFlow<String?> = _ownerName.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            _ownerName.value = settingsDao.get(AppSettings.OWNER_NAME)?.trim().orEmpty()
+        }
+    }
+
+    fun setOwnerName(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch {
+            settingsDao.put(SettingsEntity(AppSettings.OWNER_NAME, trimmed))
+            _ownerName.value = trimmed
+            withContext(Dispatchers.IO) { transactionRepository.reconcileSelfTransfers() }
+        }
+    }
 
     private val _scanning = MutableStateFlow(false)
     val scanning: StateFlow<Boolean> = _scanning.asStateFlow()

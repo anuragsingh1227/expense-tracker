@@ -53,12 +53,15 @@ fun SettingsScreen(
     onPurgeSpam: () -> Unit = {},
     cleanupRemoved: Int? = null,
     onImportSmsText: (String) -> Unit = {},
+    ownerName: String = "",
+    onOwnerNameChange: (String) -> Unit = {},
     onPermissionsChanged: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val autoSms = AppFeatures.autoSms
     var smsGranted by remember { mutableStateOf(RequiredPermissions.allGranted(ctx)) }
     var pasteBody by remember { mutableStateOf("") }
+    var nameInput by remember(ownerName) { mutableStateOf(ownerName) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -99,6 +102,34 @@ fun SettingsScreen(
             title = stringResource(R.string.tab_settings),
             subtitle = stringResource(R.string.settings_subtitle),
         )
+
+        SurfaceCard {
+            Text(stringResource(R.string.settings_owner_name_title), style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                stringResource(R.string.settings_owner_name_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = nameInput,
+                onValueChange = { nameInput = it },
+                singleLine = true,
+                label = { Text(stringResource(R.string.settings_owner_name_hint)) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+            )
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = { onOwnerNameChange(nameInput) },
+                enabled = nameInput.isNotBlank() && nameInput.trim() != ownerName,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp),
+                shape = RoundedCornerShape(14.dp),
+            ) { Text(stringResource(R.string.action_save)) }
+        }
 
         SurfaceCard {
             Text(stringResource(R.string.settings_paste_title), style = MaterialTheme.typography.titleMedium)

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
@@ -36,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -55,6 +57,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -153,6 +156,13 @@ private fun AppRoot(
         }
     }
 
+    // null = still loading from settings; "" = loaded but not set yet.
+    val ownerName by appViewModel.ownerName.collectAsState()
+    if (ownerName?.isBlank() == true) {
+        NameOnboarding(onContinue = { appViewModel.setOwnerName(it) })
+        return
+    }
+
     if (RequiredPermissions.requiresOnboarding() && !permissionsGranted && !skippedPermission) {
         PermissionOnboarding(
             onGrant = { launcher.launch(RequiredPermissions.names()) },
@@ -222,6 +232,7 @@ private fun AppRoot(
                 val lastScan by appViewModel.lastScan.collectAsState()
                 val backupState by appViewModel.backupState.collectAsState()
                 val cleanupRemoved by appViewModel.cleanupRemoved.collectAsState()
+                val settingsOwnerName by appViewModel.ownerName.collectAsState()
                 SettingsScreen(
                     onRescanInbox = { appViewModel.runInboxScan(forceFullLookback = true) },
                     scanning = scanning,
@@ -232,6 +243,8 @@ private fun AppRoot(
                     onPurgeSpam = { appViewModel.purgeSpam() },
                     cleanupRemoved = cleanupRemoved,
                     onImportSmsText = { appViewModel.importSmsTexts(it) },
+                    ownerName = settingsOwnerName.orEmpty(),
+                    onOwnerNameChange = { appViewModel.setOwnerName(it) },
                     onPermissionsChanged = {
                         permissionsGranted = true
                         if (AppFeatures.autoSms) {
@@ -244,6 +257,63 @@ private fun AppRoot(
                 val id = entry.arguments?.getString("id")?.toLongOrNull() ?: return@composable
                 TransactionDetailScreen(transactionId = id, onBack = { nav.popBackStack() })
             }
+        }
+    }
+}
+
+@Composable
+private fun NameOnboarding(
+    onContinue: (String) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding()
+            .padding(horizontal = 24.dp, vertical = 32.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column {
+            Text(
+                text = stringResource(R.string.app_name),
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = stringResource(R.string.name_onboarding_title),
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = stringResource(R.string.name_onboarding_body),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(24.dp))
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                singleLine = true,
+                label = { Text(stringResource(R.string.name_onboarding_hint)) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            )
+        }
+
+        Button(
+            onClick = { onContinue(name) },
+            enabled = name.isNotBlank(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp),
+            shape = RoundedCornerShape(14.dp),
+        ) {
+            Text(stringResource(R.string.action_continue))
         }
     }
 }

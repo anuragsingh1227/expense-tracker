@@ -1,7 +1,9 @@
 package com.expensetracker.data.repository
 
+import com.expensetracker.data.AppSettings
 import com.expensetracker.data.db.dao.CategoryMonthTotal
 import com.expensetracker.data.db.dao.CategoryTotal
+import com.expensetracker.data.db.dao.SettingsDao
 import com.expensetracker.data.db.dao.TransactionDao
 import com.expensetracker.data.db.entity.TransactionEntity
 import com.expensetracker.domain.insights.CategoryMonthSpend
@@ -44,15 +46,20 @@ interface TransactionRepository {
     suspend fun purgeNonTransactional(parser: SmsParser): Int
     /**
      * Finds debit↔credit pairs that look like own-account transfers (same amount,
-     * close in time, owner name like ANURAG in either SMS) and deletes both legs.
-     * Returns the number of rows removed.
+     * close in time, owner name in either SMS) and deletes both legs. Returns the
+     * number of rows removed.
+     *
+     * When [ownerNames] is null, uses the name configured in Settings
+     * ([com.expensetracker.data.AppSettings.OWNER_NAME]), falling back to
+     * [SelfTransferLinker.DEFAULT_OWNER_NAMES] if none is set yet.
      */
-    suspend fun reconcileSelfTransfers(ownerNames: List<String> = SelfTransferLinker.DEFAULT_OWNER_NAMES): Int
+    suspend fun reconcileSelfTransfers(ownerNames: List<String>? = null): Int
 }
 
 @Singleton
 class TransactionRepositoryImpl @Inject constructor(
     private val dao: TransactionDao,
+    private val settingsDao: SettingsDao,
 ) : TransactionRepository {
 
     override suspend fun insertIfNew(tx: Transaction): Boolean {
@@ -119,12 +126,18 @@ class TransactionRepositoryImpl @Inject constructor(
         return spamIds.size
     }
 
-    override suspend fun reconcileSelfTransfers(ownerNames: List<String>): Int {
+    override suspend fun reconcileSelfTransfers(ownerNames: List<String>?): Int {
+        val names = ownerNames ?: resolveConfiguredOwnerNames()
         val all = dao.getAllOnce().map { it.toDomain() }
-        val ids = SelfTransferLinker.idsToRemove(SelfTransferLinker.findPairs(all, ownerNames))
+        val ids = SelfTransferLinker.idsToRemove(SelfTransferLinker.findPairs(all, names))
         if (ids.isEmpty()) return 0
         ids.chunked(200).forEach { dao.deleteByIds(it) }
         return ids.size
+    }
+
+    private suspend fun resolveConfiguredOwnerNames(): List<String> {
+        val configured = settingsDao.get(AppSettings.OWNER_NAME)?.trim()
+        return if (!configured.isNullOrEmpty()) listOf(configured) else SelfTransferLinker.DEFAULT_OWNER_NAMES
     }
 }
 

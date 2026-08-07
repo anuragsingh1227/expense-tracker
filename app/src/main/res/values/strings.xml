@@ -63,6 +63,14 @@
     <string name="onboarding_benefit_privacy">No account, no cloud, no tracking</string>
     <string name="onboarding_benefit_auto">Imports the last 90 days automatically</string>
     <string name="onboarding_footer">You can change this anytime in Settings.</string>
+    <string name="name_onboarding_title">What\'s your name?</string>
+    <string name="name_onboarding_body">Used only on this device to spot transfers between your own accounts, so they never show up as expenses or income.</string>
+    <string name="name_onboarding_hint">Your first name</string>
+    <string name="action_continue">Continue</string>
+    <string name="settings_owner_name_title">Your name</string>
+    <string name="settings_owner_name_body">Used to detect transfers between your own accounts (e.g. NEFT/IMPS) so they\'re excluded from spend and income.</string>
+    <string name="settings_owner_name_hint">Your first name</string>
+    <string name="settings_owner_name_saved">Saved</string>
     <string name="empty_transactions">No transactions yet. Grant SMS permission to auto-import.</string>
     <string name="rescan_rationale">Import banking and UPI SMS from your inbox (last 90 days on first run, or a full rescan on demand).</string>
     <string name="rescan_inbox">Rescan SMS inbox</string>

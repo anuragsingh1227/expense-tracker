@@ -159,6 +159,6 @@ class SmsInboxScannerTest {
         override fun searchBetween(query: String?, from: Instant, to: Instant): Flow<List<Transaction>> =
             flowOf(stored.filter { !it.timestamp.isBefore(from) && it.timestamp.isBefore(to) })
         override suspend fun purgeNonTransactional(parser: com.expensetracker.sms.parser.SmsParser): Int = 0
-        override suspend fun reconcileSelfTransfers(ownerNames: List<String>): Int = 0
+        override suspend fun reconcileSelfTransfers(ownerNames: List<String>?): Int = 0
     }
 }
