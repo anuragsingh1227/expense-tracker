@@ -56,6 +56,12 @@ object TransactionGate {
         Regex("""\btotal\s+amount\b.{0,48}\bis\s+due\b""", RegexOption.IGNORE_CASE),
         Regex("""\bwill\s+be\s+debited\b""", RegexOption.IGNORE_CASE),
         Regex("""\bwill\s+be\s+auto[-\s]?debited\b""", RegexOption.IGNORE_CASE),
+        // Auto-pay / mandate setup notices — the real debit arrives as its own SMS.
+        Regex("""\bauto[-\s]?pay\s+(?:is\s+)?(?:activated|enabled|registered|set\s*up)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bauto[-\s]?debit\s+(?:is\s+)?(?:activated|enabled|registered|mandate)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\be[-\s]?mandate\b.{0,60}\bregistered\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bmandate\s+(?:is\s+)?(?:registered|created|activated)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bstanding\s+instruction\b.{0,60}\b(?:registered|activated|set)\b""", RegexOption.IGNORE_CASE),
         Regex("""\bplease\s+ignore\s+if\s+(?:already\s+)?paid\b""", RegexOption.IGNORE_CASE),
         Regex("""\bignore\s+if\s+(?:already\s+)?paid\b""", RegexOption.IGNORE_CASE),
         // Credit-limit marketing / raise-limit instructions (not spends).

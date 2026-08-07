@@ -132,6 +132,10 @@ object SampleSms {
     const val IDFC_RECEIVED_UPI =
         "Rs 1,000.00 received in your IDFC FIRST Bank Account XX293 from anurag singh-1@okicici on 07-08-26. Call 180010888 for dispute. UPI: 807123456789"
 
+    /** Auto-pay activation notice — future debit, NOT a completed transaction; must be ignored. */
+    const val AUTOPAY_WILL_BE_DEBITED_NOTICE =
+        "Dear Customer, INR 1,631.00 will be debited from Account XX293 on 07-08-25 towards your ICICI Bank Credit Card XX1014. Auto Pay is activated for your credit card account. RMHBK S"
+
     /** Multi-month batch for ledger / paste-import tests (blank-line separated). */
     const val LEDGER_BATCH = """
 INR 52000.00 credited to A/c XXXX9876 on 01-Jul-26 by NEFT Salary. Avl Bal Rs 80,000.00
