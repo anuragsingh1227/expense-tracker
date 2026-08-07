@@ -52,11 +52,14 @@ object SelfTransferLinker {
         val pairs = mutableListOf<PairMatch>()
 
         // Pass 1: shared reference — authoritative across any category.
+        // Prefer the stored referenceNumber; if an older parse left it blank,
+        // fall back to extracting UPI/IMPS/NEFT refs from the raw SMS body so
+        // already-imported self-transfers still pair on Clean spam / rescan.
         for (debit in allDebits) {
-            val ref = debit.referenceNumber?.takeIf { it.isNotBlank() } ?: continue
+            val ref = effectiveReference(debit) ?: continue
             val match = allCredits.firstOrNull { credit ->
                 credit.id !in usedCreditIds &&
-                    credit.referenceNumber == ref &&
+                    effectiveReference(credit) == ref &&
                     amountsEqual(debit, credit) &&
                     withinWindow(debit, credit, window)
             } ?: continue
@@ -73,7 +76,7 @@ object SelfTransferLinker {
             it.id !in usedCreditIds && it.category == Categories.TRANSFER
         }
         for (debit in transferDebits) {
-            if (debit.referenceNumber?.isNotBlank() == true) continue
+            if (effectiveReference(debit) != null) continue
             val match = transferCredits
                 .filter { credit ->
                     credit.id !in usedCreditIds &&
@@ -88,6 +91,18 @@ object SelfTransferLinker {
             pairs += PairMatch(debit = debit, credit = match)
         }
         return pairs
+    }
+
+    /** Stored ref, or one parsed from [Transaction.rawSms] for legacy rows. */
+    internal fun effectiveReference(tx: Transaction): String? =
+        tx.referenceNumber?.takeIf { it.isNotBlank() } ?: extractReferenceFromRaw(tx.rawSms)
+
+    internal fun extractReferenceFromRaw(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        RAW_REFERENCE_PATTERNS.forEach { pattern ->
+            pattern.find(raw)?.let { return it.groupValues[1] }
+        }
+        return null
     }
 
     /** Flattened ids of both legs — convenient for bulk delete. */
@@ -119,4 +134,11 @@ object SelfTransferLinker {
             Regex("""\b${Regex.escape(hint)}\b""").containsMatchIn(haystack)
         }
     }
+
+    private val RAW_REFERENCE_PATTERNS = listOf(
+        Regex("""(?i)UPI(?:\s*ref)?[:\s]*([0-9]{9,})"""),
+        Regex("""(?i)UPI/[A-Z0-9]+/([0-9]{9,})"""),
+        Regex("""(?i)(?:NEFT|IMPS|RTGS)/[A-Z0-9]{1,3}/([A-Z0-9]{8,})"""),
+        Regex("""(?i)(?:ref(?:erence)?(?:\s*no)?\.?|txn(?:\s*id)?\.?|utr)[:\s#]*([A-Z0-9]{6,})"""),
+    )
 }

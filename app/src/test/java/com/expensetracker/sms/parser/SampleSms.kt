@@ -170,6 +170,13 @@ object SampleSms {
     const val OWN_ACCOUNT_UPI_CREDIT_100000 =
         "INR 100000.00 credited\nA/c no. XX8291\n01-08-26, 07:48:42 IST\nUPI/P2A/781919319954/ANURAG SI/ICIC/\nPaym - Axis Bank"
 
+    /** Another Axis credit leg of an own-account UPI move (ref may be blank on older parses). */
+    const val OWN_ACCOUNT_UPI_CREDIT_60000 =
+        "INR 60000.00 credited\nA/c no. XX8291\n04-08-26, 07:32:27 IST\nUPI/P2A/024744670304/ANURAG SI/ICIC/\nPaym - Axis Bank"
+
+    const val OWN_ACCOUNT_UPI_DEBIT_60000 =
+        "ICICI Bank Acct XX293 debited for Rs 60000.00 on 04-Aug-26; ANURAG SINGH credited. UPI:024744670304. Call 18002662 for dispute."
+
     /** IDBI standing-instruction deposit into PPF — Investment (debit), never Transfer/spend. */
     const val IDBI_PPF_SI_CREDIT =
         "SI Transaction of Rs 12000 successfully credited in PPF Ac No ****************0079 on 07/08/2026 -IDBI Bank"

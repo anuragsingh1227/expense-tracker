@@ -43,6 +43,36 @@ class SelfTransferAndPpfTest {
     }
 
     @Test
+    fun `60000 Axis UPI credit with owner in path is Transfer and extracts ref`() {
+        val credit = parser.parse(
+            RawSms("AX-AXISBK-S", SampleSms.OWN_ACCOUNT_UPI_CREDIT_60000, now),
+        )!!
+        assertThat(credit.type).isEqualTo(TransactionType.CREDIT)
+        assertThat(credit.category).isEqualTo(Categories.TRANSFER)
+        assertThat(credit.referenceNumber).isEqualTo("024744670304")
+        assertThat(LedgerBuckets.isIncome(credit)).isFalse()
+    }
+
+    @Test
+    fun `60000 self-transfer pairs from raw SMS even when stored refs are blank`() {
+        val debit = parser.parse(
+            RawSms("AX-ICICIB", SampleSms.OWN_ACCOUNT_UPI_DEBIT_60000, now),
+        )!!.copy(id = 21, referenceNumber = null, category = Categories.OTHERS)
+        val credit = parser.parse(
+            RawSms("AX-AXISBK-S", SampleSms.OWN_ACCOUNT_UPI_CREDIT_60000, now.plusSeconds(90)),
+        )!!.copy(id = 22, referenceNumber = null)
+
+        assertThat(SelfTransferLinker.extractReferenceFromRaw(debit.rawSms))
+            .isEqualTo("024744670304")
+        assertThat(SelfTransferLinker.extractReferenceFromRaw(credit.rawSms))
+            .isEqualTo("024744670304")
+
+        val pairs = SelfTransferLinker.findPairs(listOf(debit, credit), ownerNames = emptyList())
+        assertThat(pairs).hasSize(1)
+        assertThat(SelfTransferLinker.idsToRemove(pairs)).containsExactly(21L, 22L)
+    }
+
+    @Test
     fun `shared UPI ref pairs even when an older parse miscategorized the debit`() {
         val debit = parser.parse(
             RawSms("AX-ICICIB", SampleSms.OWN_ACCOUNT_UPI_DEBIT_100000, now),
