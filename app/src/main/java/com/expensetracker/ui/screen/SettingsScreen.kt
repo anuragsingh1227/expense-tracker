@@ -55,6 +55,13 @@ fun SettingsScreen(
     onImportSmsText: (String) -> Unit = {},
     ownerName: String = "",
     onOwnerNameChange: (String) -> Unit = {},
+    appLockEnabled: Boolean = false,
+    appLockBiometricAvailable: Boolean = false,
+    appLockBiometricEnabled: Boolean = false,
+    onEnableAppLock: (String) -> Unit = {},
+    onChangeAppLockPin: (String, String, (Boolean) -> Unit) -> Unit = { _, _, onResult -> onResult(false) },
+    onDisableAppLock: (String, (Boolean) -> Unit) -> Unit = { _, onResult -> onResult(false) },
+    onSetAppLockBiometricEnabled: (Boolean) -> Unit = {},
     onPermissionsChanged: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
@@ -101,6 +108,16 @@ fun SettingsScreen(
         ScreenHeader(
             title = stringResource(R.string.tab_settings),
             subtitle = stringResource(R.string.settings_subtitle),
+        )
+
+        AppLockSettingsCard(
+            enabled = appLockEnabled,
+            biometricAvailable = appLockBiometricAvailable,
+            biometricEnabled = appLockBiometricEnabled,
+            onEnableWithPin = onEnableAppLock,
+            onChangePin = onChangeAppLockPin,
+            onDisable = onDisableAppLock,
+            onSetBiometricEnabled = onSetAppLockBiometricEnabled,
         )
 
         SurfaceCard {

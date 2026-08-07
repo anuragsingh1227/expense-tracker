@@ -178,7 +178,7 @@ fun MetricTile(
             )
             Spacer(Modifier.height(10.dp))
             Text(
-                amount.formatInr(),
+                amount.maskableFormatInr(),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -321,7 +321,7 @@ fun TransactionListItem(
     val amountColor = if (isCredit) ExpenseColors.Income else MaterialTheme.colorScheme.onSurface
     val date = tx.timestamp.atZone(ZoneId.systemDefault()).format(TX_FMT)
     val title = tx.merchant ?: tx.category
-    val a11y = "$title, $sign${tx.amount.formatInr()}, ${tx.category}, $date"
+    val a11y = "$title, $sign${tx.amount.maskableFormatInr()}, ${tx.category}, $date"
 
     Row(
         modifier = modifier
@@ -396,7 +396,7 @@ fun TransactionListItem(
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                "$sign${tx.amount.formatInr()}",
+                "$sign${tx.amount.maskableFormatInr()}",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = amountColor,
@@ -480,7 +480,7 @@ fun CategoryBreakdown(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(row.category, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                    Text(row.amount.formatInr(), style = MaterialTheme.typography.labelLarge)
+                    Text(row.amount.maskableFormatInr(), style = MaterialTheme.typography.labelLarge)
                 }
                 Spacer(Modifier.height(6.dp))
                 Box(
@@ -515,7 +515,7 @@ fun MomRisingList(
             val changeLabel = when {
                 row.isNew -> stringResource(R.string.mom_new)
                 pct != null -> stringResource(R.string.mom_up_pct, pct)
-                else -> row.delta.formatInr()
+                else -> row.delta.maskableFormatInr()
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -533,8 +533,8 @@ fun MomRisingList(
                     Text(
                         stringResource(
                             R.string.mom_vs_previous,
-                            row.previous.formatInr(),
-                            row.current.formatInr(),
+                            row.previous.maskableFormatInr(),
+                            row.current.maskableFormatInr(),
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -543,7 +543,7 @@ fun MomRisingList(
                 Spacer(Modifier.width(8.dp))
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        "+${row.delta.formatInr()}",
+                        "+${row.delta.maskableFormatInr()}",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = ExpenseColors.Coral,
@@ -594,7 +594,7 @@ fun StackedMonthBars(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        col.total.formatInr(),
+                        col.total.maskableFormatInr(),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,

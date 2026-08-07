@@ -13,12 +13,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -27,6 +33,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.expensetracker.R
 import com.expensetracker.ui.components.CategoryBreakdown
 import com.expensetracker.ui.components.EmptyState
+import com.expensetracker.ui.components.LocalAmountsHidden
 import com.expensetracker.ui.components.MetricTile
 import com.expensetracker.ui.components.MomRisingList
 import com.expensetracker.ui.components.PeriodFilterRow
@@ -34,6 +41,7 @@ import com.expensetracker.ui.components.SectionLabel
 import com.expensetracker.ui.components.StackedMonthBars
 import com.expensetracker.ui.components.SurfaceCard
 import com.expensetracker.ui.components.TransactionListItem
+import com.expensetracker.ui.components.maskableFormatInr
 
 @Composable
 fun DashboardScreen(
@@ -42,6 +50,7 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val amountsHidden by viewModel.amountsHidden.collectAsState()
     val spendLabel = when (state.period) {
         SpendPeriod.DAY -> stringResource(R.string.period_spent_day)
         SpendPeriod.WEEK -> stringResource(R.string.period_spent_week)
@@ -50,6 +59,7 @@ fun DashboardScreen(
         SpendPeriod.LAST_3_MONTHS -> stringResource(R.string.period_spent_last_3_months)
     }
 
+    CompositionLocalProvider(LocalAmountsHidden provides amountsHidden) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -58,17 +68,37 @@ fun DashboardScreen(
     ) {
         item {
             Spacer(Modifier.height(4.dp))
-            Text(
-                stringResource(R.string.home_greeting),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                stringResource(R.string.home_title),
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column {
+                    Text(
+                        stringResource(R.string.home_greeting),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        stringResource(R.string.home_title),
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                IconButton(onClick = viewModel::toggleAmountsHidden) {
+                    Icon(
+                        if (amountsHidden) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                        contentDescription = stringResource(
+                            if (amountsHidden) {
+                                R.string.dashboard_show_amounts_a11y
+                            } else {
+                                R.string.dashboard_hide_amounts_a11y
+                            },
+                        ),
+                    )
+                }
+            }
         }
 
         item {
@@ -101,7 +131,7 @@ fun DashboardScreen(
                     }
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        state.spend.formatInr(),
+                        state.spend.maskableFormatInr(),
                         style = MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.Bold,
                     )
@@ -109,9 +139,9 @@ fun DashboardScreen(
                     Text(
                         stringResource(
                             R.string.period_spend_supporting,
-                            state.income.formatInr(),
-                            state.investments.formatInr(),
-                            state.net.formatInr(),
+                            state.income.maskableFormatInr(),
+                            state.investments.maskableFormatInr(),
+                            state.net.maskableFormatInr(),
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f),
@@ -233,5 +263,6 @@ fun DashboardScreen(
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
+    }
     }
 }

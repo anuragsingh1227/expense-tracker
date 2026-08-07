@@ -1,5 +1,6 @@
 package com.expensetracker.ui
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.expensetracker.data.AppSettings
@@ -8,15 +9,20 @@ import com.expensetracker.data.backup.BackupRepository
 import com.expensetracker.data.db.dao.SettingsDao
 import com.expensetracker.data.db.entity.SettingsEntity
 import com.expensetracker.data.repository.TransactionRepository
+import com.expensetracker.domain.security.AppForegroundTracker
+import com.expensetracker.domain.security.BiometricAuthenticator
+import com.expensetracker.domain.security.PinHasher
 import com.expensetracker.sms.SmsInboxScanner
 import com.expensetracker.sms.SmsScanResult
 import com.expensetracker.sms.parser.RawSms
 import com.expensetracker.sms.parser.SmsParser
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.InputStream
@@ -40,6 +46,20 @@ data class SmsTextImportResult(
     val rejected: Int,
 )
 
+/**
+ * App-lock UI state. [locked] gates the whole app behind [com.expensetracker.ui.LockScreen]
+ * whenever [enabled] is true — on cold start, and again whenever the process is
+ * backgrounded (see [AppForegroundTracker]).
+ */
+data class AppLockUiState(
+    val loading: Boolean = true,
+    val enabled: Boolean = false,
+    val biometricAvailable: Boolean = false,
+    val biometricEnabled: Boolean = false,
+    val locked: Boolean = false,
+    val pinError: Boolean = false,
+)
+
 @HiltViewModel
 class AppViewModel @Inject constructor(
     private val scanner: SmsInboxScanner,
@@ -48,6 +68,7 @@ class AppViewModel @Inject constructor(
     private val settingsDao: SettingsDao,
     private val parser: SmsParser,
     private val clock: Clock,
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     private val _lastScan = MutableStateFlow<SmsScanResult?>(null)
@@ -57,9 +78,17 @@ class AppViewModel @Inject constructor(
     private val _ownerName = MutableStateFlow<String?>(null)
     val ownerName: StateFlow<String?> = _ownerName.asStateFlow()
 
+    private val _appLockState = MutableStateFlow(AppLockUiState())
+    val appLockState: StateFlow<AppLockUiState> = _appLockState.asStateFlow()
+
     init {
         viewModelScope.launch {
             _ownerName.value = settingsDao.get(AppSettings.OWNER_NAME)?.trim().orEmpty()
+        }
+        viewModelScope.launch { loadAppLockState() }
+        viewModelScope.launch {
+            // drop(1): ignore the initial sentinel value emitted before any real backgrounding.
+            AppForegroundTracker.backgroundedAtMillis.drop(1).collect { relockIfEnabled() }
         }
     }
 
@@ -71,6 +100,99 @@ class AppViewModel @Inject constructor(
             _ownerName.value = trimmed
             withContext(Dispatchers.IO) { transactionRepository.reconcileSelfTransfers() }
         }
+    }
+
+    private suspend fun loadAppLockState() {
+        val enabled = settingsDao.get(AppSettings.APP_LOCK_ENABLED) == "true"
+        val biometricEnabled = settingsDao.get(AppSettings.APP_LOCK_BIOMETRIC_ENABLED) == "true"
+        _appLockState.value = AppLockUiState(
+            loading = false,
+            enabled = enabled,
+            biometricAvailable = BiometricAuthenticator.isAvailable(appContext),
+            biometricEnabled = biometricEnabled,
+            locked = enabled,
+        )
+    }
+
+    private fun relockIfEnabled() {
+        if (_appLockState.value.enabled) {
+            _appLockState.value = _appLockState.value.copy(locked = true, pinError = false)
+        }
+    }
+
+    /** First-time setup or re-enabling after it was off — no current PIN to check. */
+    fun setAppLockPin(pin: String) {
+        viewModelScope.launch {
+            val salt = PinHasher.generateSalt()
+            val hash = PinHasher.hash(pin, salt)
+            settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_PIN_SALT, salt))
+            settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_PIN_HASH, hash))
+            settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_ENABLED, "true"))
+            _appLockState.value = _appLockState.value.copy(enabled = true, locked = false, pinError = false)
+        }
+    }
+
+    fun changeAppLockPin(currentPin: String, newPin: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            if (!verifyStoredPin(currentPin)) {
+                onResult(false)
+                return@launch
+            }
+            val salt = PinHasher.generateSalt()
+            val hash = PinHasher.hash(newPin, salt)
+            settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_PIN_SALT, salt))
+            settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_PIN_HASH, hash))
+            onResult(true)
+        }
+    }
+
+    fun disableAppLock(currentPin: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            if (!verifyStoredPin(currentPin)) {
+                onResult(false)
+                return@launch
+            }
+            settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_ENABLED, "false"))
+            settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_BIOMETRIC_ENABLED, "false"))
+            _appLockState.value = _appLockState.value.copy(
+                enabled = false,
+                biometricEnabled = false,
+                locked = false,
+                pinError = false,
+            )
+            onResult(true)
+        }
+    }
+
+    fun setAppLockBiometricEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_BIOMETRIC_ENABLED, enabled.toString()))
+            _appLockState.value = _appLockState.value.copy(biometricEnabled = enabled)
+        }
+    }
+
+    /** Attempt to unlock the lock screen with a typed PIN. */
+    fun submitUnlockPin(pin: String) {
+        viewModelScope.launch {
+            val ok = verifyStoredPin(pin)
+            _appLockState.value = _appLockState.value.copy(locked = !ok, pinError = !ok)
+        }
+    }
+
+    fun onBiometricUnlockSucceeded() {
+        _appLockState.value = _appLockState.value.copy(locked = false, pinError = false)
+    }
+
+    fun clearPinError() {
+        if (_appLockState.value.pinError) {
+            _appLockState.value = _appLockState.value.copy(pinError = false)
+        }
+    }
+
+    private suspend fun verifyStoredPin(pin: String): Boolean {
+        val salt = settingsDao.get(AppSettings.APP_LOCK_PIN_SALT) ?: return false
+        val hash = settingsDao.get(AppSettings.APP_LOCK_PIN_HASH) ?: return false
+        return PinHasher.matches(pin, salt, hash)
     }
 
     private val _scanning = MutableStateFlow(false)

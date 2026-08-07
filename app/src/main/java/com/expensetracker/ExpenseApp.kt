@@ -4,6 +4,10 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
+import com.expensetracker.domain.security.AppForegroundTracker
 import com.expensetracker.sms.parser.LabelRuleCatalog
 import com.expensetracker.sms.parser.MerchantCatalog
 import dagger.hilt.android.HiltAndroidApp
@@ -24,10 +28,22 @@ class ExpenseApp : Application() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        registerAppLockLifecycleObserver()
         appScope.launch {
             merchantCatalog.refresh()
             labelRuleCatalog.refresh()
         }
+    }
+
+    /** Marks the app backgrounded so [com.expensetracker.ui.AppViewModel] can re-lock it. */
+    private fun registerAppLockLifecycleObserver() {
+        ProcessLifecycleOwner.get().lifecycle.addObserver(
+            object : DefaultLifecycleObserver {
+                override fun onStop(owner: LifecycleOwner) {
+                    AppForegroundTracker.markBackgrounded(System.currentTimeMillis())
+                }
+            },
+        )
     }
 
     private fun createNotificationChannel() {

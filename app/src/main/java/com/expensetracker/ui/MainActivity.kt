@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -76,7 +77,7 @@ import com.expensetracker.ui.theme.ExpenseTheme
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -156,6 +157,23 @@ private fun AppRoot(
         }
     }
 
+    val appLockState by appViewModel.appLockState.collectAsState()
+    if (appLockState.loading) {
+        // Avoid flashing app content before we know whether app lock is enabled.
+        return
+    }
+    if (appLockState.enabled && appLockState.locked) {
+        LockScreen(
+            biometricAvailable = appLockState.biometricAvailable,
+            biometricEnabled = appLockState.biometricEnabled,
+            pinError = appLockState.pinError,
+            onSubmitPin = { appViewModel.submitUnlockPin(it) },
+            onPinChanged = { appViewModel.clearPinError() },
+            onBiometricUnlocked = { appViewModel.onBiometricUnlockSucceeded() },
+        )
+        return
+    }
+
     // null = still loading from settings; "" = loaded but not set yet.
     val ownerName by appViewModel.ownerName.collectAsState()
     if (ownerName?.isBlank() == true) {
@@ -233,6 +251,7 @@ private fun AppRoot(
                 val backupState by appViewModel.backupState.collectAsState()
                 val cleanupRemoved by appViewModel.cleanupRemoved.collectAsState()
                 val settingsOwnerName by appViewModel.ownerName.collectAsState()
+                val settingsAppLockState by appViewModel.appLockState.collectAsState()
                 SettingsScreen(
                     onRescanInbox = { appViewModel.runInboxScan(forceFullLookback = true) },
                     scanning = scanning,
@@ -245,6 +264,17 @@ private fun AppRoot(
                     onImportSmsText = { appViewModel.importSmsTexts(it) },
                     ownerName = settingsOwnerName.orEmpty(),
                     onOwnerNameChange = { appViewModel.setOwnerName(it) },
+                    appLockEnabled = settingsAppLockState.enabled,
+                    appLockBiometricAvailable = settingsAppLockState.biometricAvailable,
+                    appLockBiometricEnabled = settingsAppLockState.biometricEnabled,
+                    onEnableAppLock = { appViewModel.setAppLockPin(it) },
+                    onChangeAppLockPin = { current, new, onResult ->
+                        appViewModel.changeAppLockPin(current, new, onResult)
+                    },
+                    onDisableAppLock = { current, onResult ->
+                        appViewModel.disableAppLock(current, onResult)
+                    },
+                    onSetAppLockBiometricEnabled = { appViewModel.setAppLockBiometricEnabled(it) },
                     onPermissionsChanged = {
                         permissionsGranted = true
                         if (AppFeatures.autoSms) {

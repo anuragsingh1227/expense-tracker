@@ -4,6 +4,7 @@
     <!-- Store / Play-safe baseline: no READ_SMS / RECEIVE_SMS.
          SMS auto-import is added only by the sms product flavor. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
     <application
         android:name=".ExpenseApp"
