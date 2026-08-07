@@ -15,6 +15,7 @@ class BankSendersTest {
         assertThat(BankSenders.identify("AD-BANDHAN")).isEqualTo("Bandhan")
         assertThat(BankSenders.identify("VM-JUPITER")).isEqualTo("Jupiter")
         assertThat(BankSenders.identify("AD-FIMONEY")).isEqualTo("Fi")
+        assertThat(BankSenders.identify("AX-IDBIBK-S")).isEqualTo("IDBI")
         assertThat(BankSenders.identify("VM-GPAY")).isEqualTo("Google Pay")
     }
 

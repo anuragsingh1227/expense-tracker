@@ -26,14 +26,23 @@ class SmsParser(
         if (!isTransactional(body)) return null
 
         val amount = SmsAmountExtractor.extract(body) ?: return null
-        val type = detectType(body)
+        val ppfContribution = isPpfContribution(body)
+        // PPF SI/"credited in PPF" SMS is money you put into PPF — treat as DEBIT Investment
+        // even when the bank wording uses "credited".
+        val type = if (ppfContribution) TransactionType.DEBIT else detectType(body)
         val bank = BankSenders.identify(sms.sender)
         val merchantMatch = merchants.match(body)
-        val merchant = merchantMatch?.displayName ?: extractMerchant(body)
+        val merchant = when {
+            ppfContribution -> "PPF"
+            else -> merchantMatch?.displayName ?: extractMerchant(body)
+        }
         val labeled = labelRules.match(sms.sender, body, merchant)
-        // Ledger-correctness categories (Transfer/Refund) must win over merchant/dictionary
-        // matches — e.g. "Refund from AMAZON" must not be booked as Shopping income.
-        val category = labeled ?: resolveAutoCategory(body, type, merchantMatch?.category)
+        // Ledger-correctness categories (Transfer/Refund/Investment-PPF) must win over
+        // merchant/dictionary matches — e.g. "Refund from AMAZON" must not be Shopping.
+        val category = when {
+            ppfContribution -> Categories.INVESTMENT
+            else -> labeled ?: resolveAutoCategory(body, type, merchantMatch?.category)
+        }
         val paymentMode = detectPaymentMode(body)
         // Prefer date written in the SMS (paste/share import has no telephony timestamp).
         val timestamp = SmsDateExtractor.extract(body, zone, sms.timestamp)
@@ -181,6 +190,20 @@ class SmsParser(
             upper.contains("CHARGEBACK")
     }
 
+    /** PPF deposit / SI / deduction — money parked in Public Provident Fund. */
+    private fun isPpfContribution(body: String): Boolean {
+        val upper = body.uppercase()
+        if (!upper.contains("PPF") && !upper.contains("PUBLIC PROVIDENT")) return false
+        // Avoid false hits on pure informational PPF balance SMS with no amount move.
+        return upper.contains("CREDITED") ||
+            upper.contains("DEBITED") ||
+            upper.contains("DEDUCTION") ||
+            upper.contains("CONTRIBUTION") ||
+            upper.contains("DEPOSIT") ||
+            upper.contains("SI TRANSACTION") ||
+            upper.contains("STANDING INSTRUCTION")
+    }
+
     private fun inferCategory(body: String, type: TransactionType): String {
         val upper = body.uppercase()
         return when {
@@ -192,7 +215,8 @@ class SmsParser(
             upper.contains("INSURANCE") || upper.contains("INS PREMIUM") || upper.contains("PREMIUM PAID") ->
                 Categories.INSURANCE
             upper.contains("MUTUAL FUND") || upper.contains("SIP") || upper.contains("ZERODHA") ||
-                upper.contains("GROWW") -> Categories.INVESTMENT
+                upper.contains("GROWW") || upper.contains("PPF") || upper.contains("PUBLIC PROVIDENT") ->
+                Categories.INVESTMENT
             upper.contains("RECHARGE") -> Categories.RECHARGE
             upper.contains("ELECTRICITY") || upper.contains("WATER BILL") || upper.contains("GAS BILL") ->
                 Categories.UTILITIES
@@ -221,20 +245,22 @@ class SmsParser(
         if (upper.contains("TOWARDS") && upper.contains("CARD")) return true
         if (upper.contains("PAYMENT TO") && (upper.contains("CREDIT CARD") || upper.contains(" CC "))) return true
         if (upper.contains("CREDITED TO YOUR CARD") || upper.contains("CREDITED TO YOUR CC")) return true
-        // IMPS/NEFT self-move templates: "Acct A debited ... & Acct B credited"
+        // IMPS/NEFT/UPI self-move templates: "Acct A debited ... NAME credited"
         if (upper.contains("DEBITED") && upper.contains("CREDITED") &&
-            (upper.contains("IMPS") || upper.contains("NEFT") || upper.contains("RTGS"))
+            (upper.contains("IMPS") || upper.contains("NEFT") || upper.contains("RTGS") ||
+                upper.contains("UPI"))
         ) {
             return true
         }
         if (Regex("""ACCT\s+XX\d+\s+DEBITED.*ACCT\s+XX\d+\s+CREDITED""").containsMatchIn(upper)) {
             return true
         }
-        // Owner-name hint on a bank transfer SMS → own-account move.
+        // Owner-name hint on a bank transfer / UPI self-move SMS → own-account move.
         val names = ownerNames().map { it.trim() }.filter { it.length >= 2 }
         if (names.isNotEmpty() &&
             names.any { name -> upper.contains(name.uppercase()) } &&
             (upper.contains("NEFT") || upper.contains("IMPS") || upper.contains("RTGS") ||
+                upper.contains("UPI") ||
                 upper.contains("TRANSFERRED") || upper.contains("TRANSFER"))
         ) {
             return true
@@ -322,8 +348,10 @@ class SmsParser(
         private val REFERENCE_PATTERNS = listOf(
             Regex("""(?i)(?:ref(?:erence)?(?:\s*no)?\.?|txn(?:\s*id)?\.?|utr)[:\s#]*([A-Z0-9]{6,})"""),
             Regex("""(?i)UPI(?:\s*ref)?[:\s]*([0-9]{9,})"""),
-            // Axis NEFT/IMPS compact template: "NEFT/MB/AXOMB16602145999/V"
-            Regex("""(?i)(?:NEFT|IMPS|RTGS)/[A-Z]{1,3}/([A-Z0-9]{8,})"""),
+            // Axis/ICICI compact UPI path: "UPI/P2A/781919319954/ANURAG SI/ICIC/"
+            Regex("""(?i)UPI/[A-Z0-9]+/([0-9]{9,})"""),
+            // Axis NEFT/IMPS compact template: "NEFT/MB/AXOMB16602145999/V" or "IMPS/P2A/6217…"
+            Regex("""(?i)(?:NEFT|IMPS|RTGS)/[A-Z0-9]{1,3}/([A-Z0-9]{8,})"""),
             // Axis card-payment compact template: "CRD-PMNT-530562****0887"
             Regex("""(?i)CRD[- ]?PMNT[- ]?([A-Z0-9*]{6,})"""),
         )
