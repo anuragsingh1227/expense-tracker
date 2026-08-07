@@ -7,6 +7,8 @@ import android.content.Context
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import com.expensetracker.data.CatalogSeeder
+import com.expensetracker.data.OwnerNameProvider
 import com.expensetracker.domain.security.AppForegroundTracker
 import com.expensetracker.sms.parser.LabelRuleCatalog
 import com.expensetracker.sms.parser.MerchantCatalog
@@ -22,6 +24,8 @@ class ExpenseApp : Application() {
 
     @Inject lateinit var merchantCatalog: MerchantCatalog
     @Inject lateinit var labelRuleCatalog: LabelRuleCatalog
+    @Inject lateinit var ownerNameProvider: OwnerNameProvider
+    @Inject lateinit var catalogSeeder: CatalogSeeder
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -30,8 +34,10 @@ class ExpenseApp : Application() {
         createNotificationChannel()
         registerAppLockLifecycleObserver()
         appScope.launch {
+            catalogSeeder.seedIfEmpty()
             merchantCatalog.refresh()
             labelRuleCatalog.refresh()
+            ownerNameProvider.refresh()
         }
     }
 

@@ -21,10 +21,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,6 +42,7 @@ import com.expensetracker.ui.components.StackedMonthBars
 import com.expensetracker.ui.components.SurfaceCard
 import com.expensetracker.ui.components.TransactionListItem
 import com.expensetracker.ui.components.maskableFormatInr
+import com.expensetracker.ui.widget.MonthSpendWidgetProvider
 
 @Composable
 fun DashboardScreen(
@@ -50,6 +53,12 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val context = LocalContext.current
+    LaunchedEffect(state.spend, state.period) {
+        if (state.period == SpendPeriod.MONTH) {
+            MonthSpendWidgetProvider.cacheAmount(context, state.spend.amount)
+        }
+    }
     val spendLabel = when (state.period) {
         SpendPeriod.DAY -> stringResource(R.string.period_spent_day)
         SpendPeriod.WEEK -> stringResource(R.string.period_spent_week)

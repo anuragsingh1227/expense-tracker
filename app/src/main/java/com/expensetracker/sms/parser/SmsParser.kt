@@ -16,6 +16,8 @@ class SmsParser(
     private val merchants: MerchantMatcher = DefaultMerchantMatcher,
     private val labelRules: LabelRuleMatcher = NoLabelRules,
     private val zone: ZoneId = ZoneId.systemDefault(),
+    /** Account-holder names for parse-time own-account Transfer detection. */
+    private val ownerNames: () -> List<String> = { emptyList() },
 ) {
 
     fun parse(sms: RawSms): Transaction? {
@@ -228,8 +230,10 @@ class SmsParser(
         if (Regex("""ACCT\s+XX\d+\s+DEBITED.*ACCT\s+XX\d+\s+CREDITED""").containsMatchIn(upper)) {
             return true
         }
-        // Owner-name hint (e.g. ANURAG) on a bank transfer SMS → own-account move.
-        if (OWNER_NAME_HINT.containsMatchIn(upper) &&
+        // Owner-name hint on a bank transfer SMS → own-account move.
+        val names = ownerNames().map { it.trim() }.filter { it.length >= 2 }
+        if (names.isNotEmpty() &&
+            names.any { name -> upper.contains(name.uppercase()) } &&
             (upper.contains("NEFT") || upper.contains("IMPS") || upper.contains("RTGS") ||
                 upper.contains("TRANSFERRED") || upper.contains("TRANSFER"))
         ) {
@@ -310,8 +314,6 @@ class SmsParser(
             Regex("""(?i)\b(?:dispute|helpline|customer\s+care|toll\s*free)\b""")
         private val PHONE_HEAVY_MERCHANT =
             Regex("""(?i)(?:\d[\d\s/-]{6,}\d)|(?:\b\d{4,}[-/]\d{4,}\b)""")
-        /** Owner first-name hint used to spot own-account transfers in SMS text. */
-        private val OWNER_NAME_HINT = Regex("""\bANURAG\b""", RegexOption.IGNORE_CASE)
         /**
          * ICICI's narration code for automatic bill-payment debits: "InfoATD*Auto Debi"
          * (no word boundary before ATD — it's glued directly onto "Info" in the SMS).

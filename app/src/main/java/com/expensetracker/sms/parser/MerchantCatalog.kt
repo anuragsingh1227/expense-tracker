@@ -51,7 +51,8 @@ class MerchantCatalog @Inject constructor(
     suspend fun allOverrides(): List<MerchantEntity> = merchantDao.getAll()
 
     suspend fun replaceAll(rows: List<MerchantEntity>) {
-        merchantDao.insertAll(rows)
+        merchantDao.deleteAll()
+        if (rows.isNotEmpty()) merchantDao.insertAll(rows)
         refresh()
     }
 }

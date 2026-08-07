@@ -23,9 +23,6 @@ import java.time.Duration
  */
 object SelfTransferLinker {
 
-    /** Default owner first-name hint from the account holder's SMS text. */
-    val DEFAULT_OWNER_NAMES: List<String> = listOf("ANURAG")
-
     /** Max gap between the debit and credit SMS of a self-transfer pair. */
     val MATCH_WINDOW: Duration = Duration.ofHours(72)
 
@@ -37,10 +34,13 @@ object SelfTransferLinker {
     /**
      * Returns disjoint debit/credit pairs that look like money moved between the
      * user's own accounts. Each transaction appears in at most one pair.
+     *
+     * Pass the configured owner name(s) from Settings. When empty, only
+     * reference/UTR-based matches are linked (never a hardcoded name).
      */
     fun findPairs(
         transactions: List<Transaction>,
-        ownerNames: List<String> = DEFAULT_OWNER_NAMES,
+        ownerNames: List<String> = emptyList(),
         window: Duration = MATCH_WINDOW,
     ): List<PairMatch> {
         val nameHints = ownerNames.map { it.trim().uppercase() }.filter { it.length >= 2 }

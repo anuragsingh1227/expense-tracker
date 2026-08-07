@@ -23,6 +23,17 @@ object BankSenders {
         Regex("HSBC(IN|BK)?", RegexOption.IGNORE_CASE) to "HSBC",
         Regex("CITIBK|CITI", RegexOption.IGNORE_CASE) to "Citi",
         Regex("AMEX", RegexOption.IGNORE_CASE) to "American Express",
+        Regex("FEDERA|FEDBNK", RegexOption.IGNORE_CASE) to "Federal Bank",
+        Regex("RBL(BNK|BANK)?", RegexOption.IGNORE_CASE) to "RBL",
+        Regex("BANDHAN|BNDNBN", RegexOption.IGNORE_CASE) to "Bandhan",
+        Regex("DBS(IN|BK)?", RegexOption.IGNORE_CASE) to "DBS",
+        Regex("SCB(IN|ANK)?|STANCHART", RegexOption.IGNORE_CASE) to "Standard Chartered",
+        Regex("UCO(BNK|BANK)?", RegexOption.IGNORE_CASE) to "UCO",
+        Regex("IOB(ANK|BNK)?", RegexOption.IGNORE_CASE) to "Indian Overseas",
+        Regex("FIMONEY|FIBANK|JUSPAYFI", RegexOption.IGNORE_CASE) to "Fi",
+        Regex("JUPITER|JUPITR", RegexOption.IGNORE_CASE) to "Jupiter",
+        Regex("NIYO(GLB)?", RegexOption.IGNORE_CASE) to "Niyo",
+        Regex("SLICE", RegexOption.IGNORE_CASE) to "Slice",
         // UPI apps
         Regex("PHONEP|PHNPE", RegexOption.IGNORE_CASE) to "PhonePe",
         Regex("GPAY|GOOGLEP", RegexOption.IGNORE_CASE) to "Google Pay",
@@ -32,6 +43,9 @@ object BankSenders {
         Regex("CREDCLB|CRED", RegexOption.IGNORE_CASE) to "CRED",
         Regex("MOBIKW|MBKWIK", RegexOption.IGNORE_CASE) to "Mobikwik",
     )
+
+    /** All known bank display names (for filters / seed catalog). */
+    fun allBankNames(): List<String> = banks.map { it.second }.distinct().sorted()
 
     fun identify(sender: String?): String? {
         if (sender.isNullOrBlank()) return null

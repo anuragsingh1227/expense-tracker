@@ -43,6 +43,8 @@ class SmsReceiver : BroadcastReceiver() {
                     val inserted = repository.insertIfNew(tx)
                     if (inserted) notifier.notify(context, tx)
                 }
+                // Pair any own-account Transfer legs that arrived (or completed) with this SMS.
+                repository.reconcileSelfTransfers()
             } finally {
                 pendingResult.finish()
             }

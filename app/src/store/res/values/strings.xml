@@ -1,15 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="dashboard_subtitle">Private spending overview from payments you add or paste</string>
-    <string name="transactions_subtitle">Search and review every payment you\'ve added</string>
-    <string name="empty_dashboard_body">Paste or share a bank/UPI SMS from More, or tap + on Activity to add a payment manually. Everything stays on this device.</string>
+    <string name="empty_dashboard_body">Paste or share a bank/UPI SMS from More to start tracking — or tap + on Activity to add cash. Everything stays on this device.</string>
     <string name="empty_dashboard_action">Open More</string>
-    <string name="empty_period_transactions">No payments in this period. Try another filter, paste an SMS in More, or add one manually.</string>
-    <string name="empty_transactions">No transactions yet. Paste an SMS in More or add one with +.</string>
+    <string name="empty_period_transactions">No payments in this period. Paste SMS in More or add one with +.</string>
+    <string name="empty_transactions">No transactions yet. Paste or share SMS text in More, or add one manually.</string>
+    <string name="dashboard_subtitle">Private spending overview from pasted SMS</string>
     <string name="onboarding_benefit_sms">Paste or share bank SMS — no inbox access needed</string>
     <string name="onboarding_benefit_auto">Works offline with local parsing only</string>
-    <string name="settings_subtitle">Budgets, imports, backup, privacy</string>
+    <string name="settings_subtitle">Security, imports, budgets, backup</string>
     <string name="settings_privacy_body">This store build never requests SMS inbox permission. You choose which messages to paste or share. No internet permission — nothing leaves your phone unless you export a backup file yourself.</string>
-    <string name="permission_onboarding_title">Track expenses privately on your phone</string>
-    <string name="permission_rationale">Expense Tracker never reads your SMS inbox in this build. Paste or share bank messages, or add spends manually. Nothing is uploaded.</string>
 </resources>

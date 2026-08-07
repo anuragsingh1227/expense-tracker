@@ -1,10 +1,16 @@
 package com.expensetracker.data.backup
 
+import com.expensetracker.data.AppSettings
+import com.expensetracker.data.OwnerNameProvider
+import com.expensetracker.data.db.dao.BudgetDao
 import com.expensetracker.data.db.dao.LabelRuleDao
 import com.expensetracker.data.db.dao.MerchantDao
+import com.expensetracker.data.db.dao.SettingsDao
 import com.expensetracker.data.db.dao.TransactionDao
+import com.expensetracker.data.db.entity.BudgetEntity
 import com.expensetracker.data.db.entity.LabelRuleEntity
 import com.expensetracker.data.db.entity.MerchantEntity
+import com.expensetracker.data.db.entity.SettingsEntity
 import com.expensetracker.data.db.entity.TransactionEntity
 import com.expensetracker.sms.parser.Categories
 import com.expensetracker.sms.parser.LabelRuleCatalog
@@ -25,10 +31,17 @@ class BackupRepositoryTest {
     private val clock = Clock.fixed(now, ZoneOffset.UTC)
 
     @Test
-    fun `export then import restores merchants labels and skips duplicate transactions`() = runTest {
+    fun `export then import restores merchants labels settings and skips duplicate transactions`() = runTest {
         val txDao = FakeTransactionDao()
         val merchantDao = FakeMerchantDao()
         val labelDao = FakeLabelRuleDao()
+        val budgetDao = FakeBudgetDao()
+        val settingsDao = FakeSettingsDao()
+        settingsDao.put(SettingsEntity(AppSettings.OWNER_NAME, "Priya"))
+        settingsDao.put(SettingsEntity(AppSettings.AMOUNTS_HIDDEN, "true"))
+        val ownerNames = OwnerNameProvider(settingsDao)
+        ownerNames.refresh()
+
         val catalog = MerchantCatalog(merchantDao)
         val labels = LabelRuleCatalog(labelDao)
         catalog.remember("Groww", Categories.INVESTMENT)
@@ -37,6 +50,13 @@ class BackupRepositoryTest {
             senderContains = "HDFCBK",
             bodyContains = "GROWW",
             merchantContains = null,
+        )
+        budgetDao.upsert(
+            BudgetEntity(
+                category = Categories.FOOD,
+                monthlyLimit = BigDecimal("5000.00"),
+                startsAt = now,
+            ),
         )
 
         txDao.insert(
@@ -61,11 +81,16 @@ class BackupRepositoryTest {
             ),
         )
 
-        val repo = BackupRepository(txDao, catalog, labels, clock)
+        val repo = BackupRepository(txDao, catalog, labels, budgetDao, settingsDao, ownerNames, clock)
         val json = repo.exportJson()
+        assertThat(json).contains("Priya")
+        assertThat(json).contains("Food")
+
+        val csv = repo.exportCsv()
+        assertThat(csv).contains("Groww")
+        assertThat(csv.lines().first()).contains("amount")
 
         val txDao2 = FakeTransactionDao()
-        // Pre-seed duplicate
         txDao2.insert(
             TransactionEntity(
                 amount = BigDecimal("5000.00"),
@@ -87,16 +112,25 @@ class BackupRepositoryTest {
                 dedupeHash = "hash-groww-1",
             ),
         )
+        val settingsDao2 = FakeSettingsDao()
+        val ownerNames2 = OwnerNameProvider(settingsDao2)
         val catalog2 = MerchantCatalog(FakeMerchantDao())
         val labels2 = LabelRuleCatalog(FakeLabelRuleDao())
-        val result = BackupRepository(txDao2, catalog2, labels2, clock).importJson(json)
+        val budgetDao2 = FakeBudgetDao()
+        val result = BackupRepository(
+            txDao2, catalog2, labels2, budgetDao2, settingsDao2, ownerNames2, clock,
+        ).importJson(json)
 
         assertThat(result.transactionsInserted).isEqualTo(0)
         assertThat(result.transactionsSkipped).isEqualTo(1)
         assertThat(result.merchantsRestored).isEqualTo(1)
         assertThat(result.labelRulesRestored).isEqualTo(1)
+        assertThat(result.budgetsRestored).isEqualTo(1)
+        assertThat(result.settingsRestored).isAtLeast(1)
         assertThat(catalog2.match("paid to GROWW")?.category).isEqualTo(Categories.INVESTMENT)
         assertThat(labels2.match("VM-HDFCBK", "paid GROWW SIP", null)).isEqualTo("SIP")
+        assertThat(settingsDao2.get(AppSettings.OWNER_NAME)).isEqualTo("Priya")
+        assertThat(ownerNames2.names()).containsExactly("Priya")
     }
 
     private class FakeTransactionDao : TransactionDao {
@@ -130,9 +164,7 @@ class BackupRepositoryTest {
             flowOf(emptyList<com.expensetracker.data.db.dao.CategoryMonthTotal>())
         override fun search(query: String?): Flow<List<TransactionEntity>> = flowOf(rows)
         override fun searchBetween(query: String?, from: Instant, to: Instant): Flow<List<TransactionEntity>> =
-            flowOf(
-                rows.filter { !it.timestamp.isBefore(from) && it.timestamp.isBefore(to) },
-            )
+            flowOf(rows.filter { !it.timestamp.isBefore(from) && it.timestamp.isBefore(to) })
         override suspend fun getIdAndRawSms() = rows.map {
             com.expensetracker.data.db.dao.IdRawSms(it.id, it.rawSms)
         }
@@ -148,6 +180,9 @@ class BackupRepositoryTest {
         }
 
         override suspend fun getAll(): List<MerchantEntity> = rows.values.toList()
+        override suspend fun deleteAll() {
+            rows.clear()
+        }
     }
 
     private class FakeLabelRuleDao : LabelRuleDao {
@@ -173,6 +208,43 @@ class BackupRepositoryTest {
 
         override suspend fun deleteAll() {
             rows.clear()
+        }
+    }
+
+    private class FakeBudgetDao : BudgetDao {
+        private val rows = mutableListOf<BudgetEntity>()
+        private var seq = 1L
+
+        override suspend fun upsert(entity: BudgetEntity): Long {
+            val id = if (entity.id == 0L) seq++ else entity.id
+            rows.removeAll { it.id == id || it.category == entity.category }
+            rows += entity.copy(id = id)
+            return id
+        }
+
+        override fun observeAll(): Flow<List<BudgetEntity>> = flowOf(rows.toList())
+        override suspend fun getAll(): List<BudgetEntity> = rows.toList()
+        override suspend fun delete(id: Long) {
+            rows.removeAll { it.id == id }
+        }
+
+        override suspend fun deleteAll() {
+            rows.clear()
+        }
+    }
+
+    private class FakeSettingsDao : SettingsDao {
+        private val map = mutableMapOf<String, String>()
+        override suspend fun put(entity: SettingsEntity) {
+            map[entity.key] = entity.value
+        }
+
+        override suspend fun get(key: String): String? = map[key]
+        override suspend fun getAll(): List<SettingsEntity> =
+            map.map { SettingsEntity(it.key, it.value) }
+
+        override suspend fun delete(key: String) {
+            map.remove(key)
         }
     }
 }

@@ -39,7 +39,7 @@ class SelfTransferLinkerTest {
             t0.plus(2, ChronoUnit.MINUTES),
         )
 
-        val pairs = SelfTransferLinker.findPairs(listOf(debit, credit))
+        val pairs = SelfTransferLinker.findPairs(listOf(debit, credit), ownerNames = listOf("ANURAG"))
         assertThat(pairs).hasSize(1)
         assertThat(pairs[0].debit.id).isEqualTo(1)
         assertThat(pairs[0].credit.id).isEqualTo(2)

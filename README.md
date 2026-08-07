@@ -6,8 +6,8 @@ Automatic Indian expense tracker with **on-device** parsing. No network permissi
 
 | Flavor | Package | SMS inbox | Publish to |
 |--------|---------|-----------|------------|
-| **store** | `com.expensetracker.offline` | No (paste / share only) | Google Play & other stores |
-| **sms** | `com.expensetracker.offline.sms` | Yes | GitHub / sideload / F-Droid |
+| **store** | `com.expensetracker.offline` | No (paste / share / manual add) | Google Play & other stores |
+| **sms** | `…offline.sms` | Yes | GitHub / sideload / F-Droid |
 
 See [docs/STORE_PUBLISHING.md](docs/STORE_PUBLISHING.md) and [docs/privacy-policy.html](docs/privacy-policy.html).
 
@@ -43,8 +43,18 @@ Release signing: copy `keystore.properties.example` → `keystore.properties` an
 
 - No `INTERNET` permission.
 - Auto-backup / data-extraction rules exclude the database.
-- Store build never reads the SMS inbox; you paste or share message text.
+- Store build never reads the SMS inbox; you paste or share message text, or add cash manually.
 
 ## Features
 
-Spends dashboard with Day/Week/Month/Last/3 mo filters, MoM rising categories, 3-month stacked bars, Activity search, label rules from raw SMS text, JSON backup via system picker (Drive-compatible), spam cleanup.
+- Spends dashboard (Day/Week/Month/Last/3 mo), MoM rising categories, stacked month bars, investments bucket
+- Activity search, category/bank filters, multi-select copy SMS or bulk delete, manual add (+)
+- Transaction edit (amount, merchant, date, type, category, notes) + label rules (create, manage, apply to past)
+- Monthly category budgets with progress
+- Owner-name onboarding for self-transfer detection (no hardcoded names)
+- App lock (PIN + optional biometric, lockout after failed attempts) and hide-amounts (app-wide)
+- JSON backup/restore (includes settings) + CSV export
+- Home-screen month-spend widget
+- Spam cleanup; refunds net against spend; Transfer pairing
+
+Current version: see `versionName` / `versionCode` in `app/build.gradle.kts` (1.1.7 / 107 at last release).

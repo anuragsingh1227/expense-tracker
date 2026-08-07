@@ -128,6 +128,12 @@ class SmsInboxScannerTest {
         }
 
         override suspend fun get(key: String): String? = map[key]
+        override suspend fun getAll(): List<SettingsEntity> =
+            map.map { SettingsEntity(it.key, it.value) }
+
+        override suspend fun delete(key: String) {
+            map.remove(key)
+        }
     }
 
     private class FakeTransactionRepository : TransactionRepository {
