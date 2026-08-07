@@ -1,8 +1,9 @@
 package com.expensetracker.ui.screen
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,20 +13,29 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -46,6 +56,7 @@ import androidx.lifecycle.viewModelScope
 import com.expensetracker.R
 import com.expensetracker.data.repository.TransactionRepository
 import com.expensetracker.domain.model.Transaction
+import com.expensetracker.sms.parser.Categories
 import com.expensetracker.ui.components.EmptyState
 import com.expensetracker.ui.components.PeriodFilterRow
 import com.expensetracker.ui.components.ScreenHeader
@@ -67,6 +78,9 @@ data class ActivityUiState(
     val period: SpendPeriod = SpendPeriod.MONTH,
     val rangeLabel: String = "",
     val transactions: List<Transaction> = emptyList(),
+    val categoryFilter: String? = null,
+    val bankFilter: String? = null,
+    val availableBanks: List<String> = emptyList(),
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -78,20 +92,36 @@ class TransactionsViewModel @Inject constructor(
 
     private val queryFlow = MutableStateFlow<String?>(null)
     private val periodFlow = MutableStateFlow(SpendPeriod.MONTH)
+    private val categoryFilterFlow = MutableStateFlow<String?>(null)
+    private val bankFilterFlow = MutableStateFlow<String?>(null)
 
     val state: StateFlow<ActivityUiState> = combine(
         queryFlow,
         periodFlow,
+        categoryFilterFlow,
+        bankFilterFlow,
         dateBoundaryFlow(clock),
-    ) { query, period, _ -> query to period }
-        .flatMapLatest { (query, period) ->
-            val window = DashboardRanges.forPeriod(period, clock)
-            repository.searchBetween(query, window.fromInclusive, window.toExclusive)
+    ) { query, period, category, bank, _ ->
+        ActivityFilters(query, period, category, bank)
+    }
+        .flatMapLatest { filters ->
+            val window = DashboardRanges.forPeriod(filters.period, clock)
+            repository.searchBetween(filters.query, window.fromInclusive, window.toExclusive)
                 .map { list ->
+                    val banks = list.mapNotNull { it.bank?.takeIf(String::isNotBlank) }
+                        .distinct()
+                        .sorted()
+                    val filtered = list.filter { tx ->
+                        (filters.category == null || tx.category == filters.category) &&
+                            (filters.bank == null || tx.bank == filters.bank)
+                    }
                     ActivityUiState(
-                        period = period,
+                        period = filters.period,
                         rangeLabel = window.labelRange,
-                        transactions = list,
+                        transactions = filtered,
+                        categoryFilter = filters.category,
+                        bankFilter = filters.bank,
+                        availableBanks = banks,
                     )
                 }
         }
@@ -104,11 +134,45 @@ class TransactionsViewModel @Inject constructor(
     fun setPeriod(period: SpendPeriod) {
         periodFlow.value = period
     }
+
+    fun setCategoryFilter(category: String?) {
+        categoryFilterFlow.value = category
+    }
+
+    fun setBankFilter(bank: String?) {
+        bankFilterFlow.value = bank
+    }
+
+    fun deleteSelected(ids: Collection<Long>, onDone: () -> Unit) {
+        viewModelScope.launch {
+            repository.deleteIds(ids)
+            onDone()
+        }
+    }
+
+    private data class ActivityFilters(
+        val query: String?,
+        val period: SpendPeriod,
+        val category: String?,
+        val bank: String?,
+    )
 }
+
+private val FILTER_CATEGORIES = listOf(
+    Categories.FOOD,
+    Categories.GROCERIES,
+    Categories.SHOPPING,
+    Categories.TRAVEL,
+    Categories.TRANSPORT,
+    Categories.UTILITIES,
+    Categories.TRANSFER,
+    Categories.OTHERS,
+)
 
 @Composable
 fun TransactionsScreen(
     onOpenTransaction: (Long) -> Unit,
+    onAddTransaction: () -> Unit = {},
     viewModel: TransactionsViewModel = hiltViewModel(),
 ) {
     var query by remember { mutableStateOf("") }
@@ -118,13 +182,12 @@ fun TransactionsScreen(
     val scope = rememberCoroutineScope()
     val copiedMessageTemplate = stringResource(R.string.activity_copied_sms)
     val noSmsMessage = stringResource(R.string.activity_no_sms_to_copy)
+    val deletedMessageTemplate = stringResource(R.string.activity_deleted)
 
     var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
+    var confirmDelete by remember { mutableStateOf(false) }
     val selectMode = selectedIds.isNotEmpty()
 
-    // If the visible list changes (period/search change, or a purge/reconcile ran)
-    // while some selected rows are no longer shown, drop them so the "N selected"
-    // count and Copy action only ever reflect what's actually still selectable.
     LaunchedEffect(state.transactions) {
         val visibleIds = state.transactions.mapTo(mutableSetOf()) { it.id }
         val pruned = selectedIds.intersect(visibleIds)
@@ -150,110 +213,243 @@ fun TransactionsScreen(
         selectedIds = emptySet()
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp),
-    ) {
-        Spacer(Modifier.height(8.dp))
-        if (selectMode) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    stringResource(R.string.selection_count, selectedIds.size),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { selectedIds = emptySet() }) {
-                        Text(stringResource(R.string.action_cancel))
-                    }
-                    Button(onClick = ::copySelected) {
-                        Icon(
-                            Icons.Outlined.ContentCopy,
-                            contentDescription = null,
-                            modifier = Modifier.height(18.dp),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.action_copy_sms))
-                    }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(stringResource(R.string.bulk_delete_confirm_title)) },
+            text = {
+                Text(stringResource(R.string.bulk_delete_confirm_body, selectedIds.size))
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val ids = selectedIds.toList()
+                        confirmDelete = false
+                        viewModel.deleteSelected(ids) {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(deletedMessageTemplate.format(ids.size))
+                            }
+                            selectedIds = emptySet()
+                        }
+                    },
+                ) {
+                    Text(
+                        stringResource(R.string.action_confirm_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            if (!selectMode) {
+                FloatingActionButton(
+                    onClick = onAddTransaction,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ) {
+                    Icon(
+                        Icons.Filled.Add,
+                        contentDescription = stringResource(R.string.add_transaction_fab_a11y),
+                    )
                 }
             }
-        } else {
-            ScreenHeader(
-                title = stringResource(R.string.tab_transactions),
-                subtitle = if (state.rangeLabel.isNotBlank()) {
-                    state.rangeLabel
-                } else {
-                    stringResource(R.string.transactions_subtitle)
-                },
-            )
-        }
-        Spacer(Modifier.height(14.dp))
-        PeriodFilterRow(
-            selected = state.period,
-            onSelect = viewModel::setPeriod,
-        )
-        Spacer(Modifier.height(14.dp))
-        OutlinedTextField(
-            value = query,
-            onValueChange = {
-                query = it
-                viewModel.setQuery(it)
-            },
-            singleLine = true,
-            label = { Text(stringResource(R.string.search_hint)) },
-            leadingIcon = {
-                Icon(
-                    Icons.Outlined.Search,
-                    contentDescription = stringResource(R.string.search_hint),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-            ),
-        )
-        Spacer(Modifier.height(16.dp))
-        when {
-            state.transactions.isEmpty() && query.isNotBlank() -> {
-                EmptyState(
-                    icon = Icons.Outlined.SearchOff,
-                    title = stringResource(R.string.search_empty_title),
-                    body = stringResource(R.string.search_empty_body),
-                )
-            }
-            state.transactions.isEmpty() -> {
-                EmptyState(
-                    icon = Icons.Outlined.SearchOff,
-                    title = stringResource(R.string.empty_transactions_title),
-                    body = stringResource(R.string.empty_period_transactions),
-                )
-            }
-            else -> {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(state.transactions, key = { it.id }) { tx ->
-                        TransactionListItem(
-                            tx,
-                            onClick = {
-                                if (selectMode) toggleSelected(tx.id) else onOpenTransaction(tx.id)
-                            },
-                            selectMode = selectMode,
-                            selected = tx.id in selectedIds,
-                            onLongClick = { toggleSelected(tx.id) },
-                        )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 20.dp),
+        ) {
+            Spacer(Modifier.height(8.dp))
+            if (selectMode) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        stringResource(R.string.selection_count, selectedIds.size),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { selectedIds = emptySet() }) {
+                            Text(stringResource(R.string.action_cancel))
+                        }
+                        OutlinedButton(
+                            onClick = { confirmDelete = true },
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error,
+                            ),
+                        ) {
+                            Icon(
+                                Icons.Outlined.Delete,
+                                contentDescription = null,
+                                modifier = Modifier.height(18.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(R.string.action_delete))
+                        }
+                        Button(onClick = ::copySelected) {
+                            Icon(
+                                Icons.Outlined.ContentCopy,
+                                contentDescription = null,
+                                modifier = Modifier.height(18.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(R.string.action_copy_sms))
+                        }
                     }
-                    item { Spacer(Modifier.height(16.dp)) }
+                }
+            } else {
+                ScreenHeader(
+                    title = stringResource(R.string.tab_transactions),
+                    subtitle = if (state.rangeLabel.isNotBlank()) {
+                        state.rangeLabel
+                    } else {
+                        stringResource(R.string.transactions_subtitle)
+                    },
+                )
+            }
+            Spacer(Modifier.height(14.dp))
+            PeriodFilterRow(
+                selected = state.period,
+                onSelect = viewModel::setPeriod,
+            )
+            Spacer(Modifier.height(10.dp))
+            CategoryFilterRow(
+                selected = state.categoryFilter,
+                onSelect = viewModel::setCategoryFilter,
+            )
+            if (state.availableBanks.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                BankFilterRow(
+                    banks = state.availableBanks,
+                    selected = state.bankFilter,
+                    onSelect = viewModel::setBankFilter,
+                )
+            }
+            Spacer(Modifier.height(14.dp))
+            OutlinedTextField(
+                value = query,
+                onValueChange = {
+                    query = it
+                    viewModel.setQuery(it)
+                },
+                singleLine = true,
+                label = { Text(stringResource(R.string.search_hint)) },
+                leadingIcon = {
+                    Icon(
+                        Icons.Outlined.Search,
+                        contentDescription = stringResource(R.string.search_hint),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                ),
+            )
+            Spacer(Modifier.height(16.dp))
+            when {
+                state.transactions.isEmpty() && query.isNotBlank() -> {
+                    EmptyState(
+                        icon = Icons.Outlined.SearchOff,
+                        title = stringResource(R.string.search_empty_title),
+                        body = stringResource(R.string.search_empty_body),
+                    )
+                }
+                state.transactions.isEmpty() -> {
+                    EmptyState(
+                        icon = Icons.Outlined.SearchOff,
+                        title = stringResource(R.string.empty_transactions_title),
+                        body = stringResource(R.string.empty_period_transactions),
+                    )
+                }
+                else -> {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        contentPadding = PaddingValues(bottom = 88.dp),
+                    ) {
+                        items(state.transactions, key = { it.id }) { tx ->
+                            TransactionListItem(
+                                tx,
+                                onClick = {
+                                    if (selectMode) toggleSelected(tx.id) else onOpenTransaction(tx.id)
+                                },
+                                selectMode = selectMode,
+                                selected = tx.id in selectedIds,
+                                onLongClick = { toggleSelected(tx.id) },
+                            )
+                        }
+                    }
                 }
             }
         }
     }
-    SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+}
+
+@Composable
+private fun CategoryFilterRow(
+    selected: String?,
+    onSelect: (String?) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        FilterChip(
+            selected = selected == null,
+            onClick = { onSelect(null) },
+            label = { Text(stringResource(R.string.filter_all_categories)) },
+        )
+        FILTER_CATEGORIES.forEach { cat ->
+            FilterChip(
+                selected = selected == cat,
+                onClick = { onSelect(if (selected == cat) null else cat) },
+                label = { Text(cat) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun BankFilterRow(
+    banks: List<String>,
+    selected: String?,
+    onSelect: (String?) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        FilterChip(
+            selected = selected == null,
+            onClick = { onSelect(null) },
+            label = { Text(stringResource(R.string.filter_all_banks)) },
+        )
+        banks.forEach { bank ->
+            FilterChip(
+                selected = selected == bank,
+                onClick = { onSelect(if (selected == bank) null else bank) },
+                label = { Text(bank) },
+            )
+        }
     }
 }

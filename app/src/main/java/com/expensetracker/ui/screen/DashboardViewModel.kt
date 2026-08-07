@@ -2,9 +2,6 @@ package com.expensetracker.ui.screen
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.expensetracker.data.AppSettings
-import com.expensetracker.data.db.dao.SettingsDao
-import com.expensetracker.data.db.entity.SettingsEntity
 import com.expensetracker.data.repository.CategorySpend
 import com.expensetracker.data.repository.TransactionRepository
 import com.expensetracker.domain.insights.CategoryMomChange
@@ -21,12 +18,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import java.time.Clock
 import java.time.LocalDate
 import javax.inject.Inject
@@ -66,38 +61,10 @@ private data class PeriodInsights(
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val repository: TransactionRepository,
-    private val settingsDao: SettingsDao,
     private val clock: Clock,
 ) : ViewModel() {
 
     private val periodFlow = MutableStateFlow(SpendPeriod.MONTH)
-
-    private val _amountsHidden = MutableStateFlow(false)
-    /** Persisted "hide rupee amounts" toggle for the Dashboard only. */
-    val amountsHidden: StateFlow<Boolean> = _amountsHidden.asStateFlow()
-
-    /** True once either the initial load finished or the user has toggled — guards
-     *  against the slow initial settings read overwriting a fast user tap. */
-    private var amountsHiddenResolved = false
-
-    init {
-        viewModelScope.launch {
-            val persisted = settingsDao.get(AppSettings.AMOUNTS_HIDDEN) == "true"
-            if (!amountsHiddenResolved) {
-                _amountsHidden.value = persisted
-                amountsHiddenResolved = true
-            }
-        }
-    }
-
-    fun toggleAmountsHidden() {
-        amountsHiddenResolved = true
-        val next = !_amountsHidden.value
-        _amountsHidden.value = next
-        viewModelScope.launch {
-            settingsDao.put(SettingsEntity(AppSettings.AMOUNTS_HIDDEN, next.toString()))
-        }
-    }
 
     val state: StateFlow<DashboardState> = combine(
         periodFlow,

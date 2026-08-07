@@ -12,6 +12,9 @@ object AppSettings {
     const val APP_LOCK_PIN_SALT = "app_lock_pin_salt"
     const val APP_LOCK_BIOMETRIC_ENABLED = "app_lock_biometric_enabled"
 
-    /** Whether the Dashboard should mask rupee amounts behind dots. */
+    /** Whether rupee amounts should be masked behind dots (app-wide). */
     const val AMOUNTS_HIDDEN = "amounts_hidden"
+
+    /** Epoch millis until which PIN entry is locked after too many failures. */
+    const val APP_LOCK_LOCKOUT_UNTIL = "app_lock_lockout_until"
 }

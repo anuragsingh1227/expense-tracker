@@ -139,8 +139,17 @@ class SmsInboxScannerTest {
             return true
         }
 
+        override suspend fun insertManual(tx: Transaction): Long {
+            val id = stored.size + 1L
+            stored += tx.copy(id = id)
+            return id
+        }
+
         override suspend fun update(tx: Transaction) = Unit
         override suspend fun delete(id: Long) = Unit
+        override suspend fun deleteIds(ids: Collection<Long>) {
+            stored.removeAll { it.id in ids }
+        }
         override suspend fun find(id: Long): Transaction? = stored.find { it.id == id }
         override fun observeRecent(limit: Int): Flow<List<Transaction>> = flowOf(stored.take(limit))
         override fun observeAll(): Flow<List<Transaction>> = flowOf(stored)

@@ -21,7 +21,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -33,7 +32,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.expensetracker.R
 import com.expensetracker.ui.components.CategoryBreakdown
 import com.expensetracker.ui.components.EmptyState
-import com.expensetracker.ui.components.LocalAmountsHidden
 import com.expensetracker.ui.components.MetricTile
 import com.expensetracker.ui.components.MomRisingList
 import com.expensetracker.ui.components.PeriodFilterRow
@@ -47,10 +45,11 @@ import com.expensetracker.ui.components.maskableFormatInr
 fun DashboardScreen(
     onOpenTransaction: (Long) -> Unit,
     onOpenSettings: () -> Unit = {},
+    amountsHidden: Boolean = false,
+    onToggleAmountsHidden: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
-    val amountsHidden by viewModel.amountsHidden.collectAsState()
     val spendLabel = when (state.period) {
         SpendPeriod.DAY -> stringResource(R.string.period_spent_day)
         SpendPeriod.WEEK -> stringResource(R.string.period_spent_week)
@@ -59,7 +58,6 @@ fun DashboardScreen(
         SpendPeriod.LAST_3_MONTHS -> stringResource(R.string.period_spent_last_3_months)
     }
 
-    CompositionLocalProvider(LocalAmountsHidden provides amountsHidden) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -86,7 +84,7 @@ fun DashboardScreen(
                         fontWeight = FontWeight.Bold,
                     )
                 }
-                IconButton(onClick = viewModel::toggleAmountsHidden) {
+                IconButton(onClick = onToggleAmountsHidden) {
                     Icon(
                         if (amountsHidden) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
                         contentDescription = stringResource(
@@ -263,6 +261,5 @@ fun DashboardScreen(
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
-    }
     }
 }

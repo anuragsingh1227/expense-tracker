@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.expensetracker.data.AppSettings
+import com.expensetracker.data.OwnerNameProvider
 import com.expensetracker.data.backup.BackupImportResult
 import com.expensetracker.data.backup.BackupRepository
 import com.expensetracker.data.db.dao.SettingsDao
@@ -61,6 +62,8 @@ data class AppLockUiState(
     val biometricEnabled: Boolean = false,
     val locked: Boolean = false,
     val pinError: Boolean = false,
+    /** Epoch millis until which PIN entry is refused after too many failures; 0 = none. */
+    val lockoutUntilMillis: Long = 0L,
 )
 
 @HiltViewModel
@@ -69,6 +72,7 @@ class AppViewModel @Inject constructor(
     private val backupRepository: BackupRepository,
     private val transactionRepository: TransactionRepository,
     private val settingsDao: SettingsDao,
+    private val ownerNameProvider: OwnerNameProvider,
     private val parser: SmsParser,
     private val clock: Clock,
     @ApplicationContext private val appContext: Context,
@@ -84,11 +88,30 @@ class AppViewModel @Inject constructor(
     private val _appLockState = MutableStateFlow(AppLockUiState())
     val appLockState: StateFlow<AppLockUiState> = _appLockState.asStateFlow()
 
+    private val _amountsHidden = MutableStateFlow(false)
+    /** Persisted "hide rupee amounts" toggle — shared app-wide via CompositionLocal. */
+    val amountsHidden: StateFlow<Boolean> = _amountsHidden.asStateFlow()
+
+    /** True once either the initial load finished or the user has toggled — guards
+     *  against the slow initial settings read overwriting a fast user tap. */
+    private var amountsHiddenResolved = false
+
+    /** In-memory consecutive PIN failures (reset on success or process death). */
+    private var pinFailureCount = 0
+
     init {
         viewModelScope.launch {
             _ownerName.value = settingsDao.get(AppSettings.OWNER_NAME)?.trim().orEmpty()
+            withContext(Dispatchers.IO) { ownerNameProvider.refresh() }
         }
         viewModelScope.launch { loadAppLockState() }
+        viewModelScope.launch {
+            val persisted = settingsDao.get(AppSettings.AMOUNTS_HIDDEN) == "true"
+            if (!amountsHiddenResolved) {
+                _amountsHidden.value = persisted
+                amountsHiddenResolved = true
+            }
+        }
         viewModelScope.launch {
             // drop(1): ignore the initial sentinel value emitted before any real backgrounding.
             AppForegroundTracker.backgroundedAtMillis.drop(1).collect { relockIfEnabled() }
@@ -101,19 +124,35 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             settingsDao.put(SettingsEntity(AppSettings.OWNER_NAME, trimmed))
             _ownerName.value = trimmed
-            withContext(Dispatchers.IO) { transactionRepository.reconcileSelfTransfers() }
+            withContext(Dispatchers.IO) {
+                ownerNameProvider.refresh()
+                transactionRepository.reconcileSelfTransfers()
+            }
+        }
+    }
+
+    fun toggleAmountsHidden() {
+        amountsHiddenResolved = true
+        val next = !_amountsHidden.value
+        _amountsHidden.value = next
+        viewModelScope.launch {
+            settingsDao.put(SettingsEntity(AppSettings.AMOUNTS_HIDDEN, next.toString()))
         }
     }
 
     private suspend fun loadAppLockState() {
         val enabled = settingsDao.get(AppSettings.APP_LOCK_ENABLED) == "true"
         val biometricEnabled = settingsDao.get(AppSettings.APP_LOCK_BIOMETRIC_ENABLED) == "true"
+        val lockoutUntil = settingsDao.get(AppSettings.APP_LOCK_LOCKOUT_UNTIL)?.toLongOrNull() ?: 0L
+        val now = Instant.now(clock).toEpochMilli()
+        val activeLockout = if (lockoutUntil > now) lockoutUntil else 0L
         _appLockState.value = AppLockUiState(
             loading = false,
             enabled = enabled,
             biometricAvailable = BiometricAuthenticator.isAvailable(appContext),
             biometricEnabled = biometricEnabled,
             locked = enabled,
+            lockoutUntilMillis = activeLockout,
         )
     }
 
@@ -139,7 +178,13 @@ class AppViewModel @Inject constructor(
                     SettingsEntity(AppSettings.APP_LOCK_ENABLED, "true"),
                 ),
             )
-            _appLockState.value = _appLockState.value.copy(enabled = true, locked = false, pinError = false)
+            pinFailureCount = 0
+            _appLockState.value = _appLockState.value.copy(
+                enabled = true,
+                locked = false,
+                pinError = false,
+                lockoutUntilMillis = 0L,
+            )
             onResult(true)
         }
     }
@@ -176,11 +221,13 @@ class AppViewModel @Inject constructor(
                     SettingsEntity(AppSettings.APP_LOCK_BIOMETRIC_ENABLED, "false"),
                 ),
             )
+            pinFailureCount = 0
             _appLockState.value = _appLockState.value.copy(
                 enabled = false,
                 biometricEnabled = false,
                 locked = false,
                 pinError = false,
+                lockoutUntilMillis = 0L,
             )
             onResult(true)
         }
@@ -194,25 +241,67 @@ class AppViewModel @Inject constructor(
     }
 
     /**
-     * Attempt to unlock the lock screen with a typed PIN. If the app was
-     * backgrounded again while the PIN was being verified, stay locked even on
-     * a correct PIN — otherwise a slow verification (PBKDF2) racing a Home-button
-     * press could unlock the app into the background/recents preview.
+     * Attempt to unlock the lock screen with a typed PIN. After [MAX_PIN_FAILURES]
+     * consecutive failures, PIN entry is refused until [lockoutUntilMillis].
+     * If the app was backgrounded again while the PIN was being verified, stay
+     * locked even on a correct PIN — otherwise a slow verification (PBKDF2)
+     * racing a Home-button press could unlock the app into the background/recents preview.
      */
-    fun submitUnlockPin(pin: String) {
+    fun unlockWithPin(pin: String) {
+        val now = Instant.now(clock).toEpochMilli()
+        val lockoutUntil = _appLockState.value.lockoutUntilMillis
+        if (lockoutUntil > now) {
+            _appLockState.value = _appLockState.value.copy(pinError = false)
+            return
+        }
         val verifyStartedAt = AppForegroundTracker.backgroundedAtMillis.value
         viewModelScope.launch {
             val ok = verifyStoredPin(pin)
             val backgroundedDuringVerify = AppForegroundTracker.backgroundedAtMillis.value != verifyStartedAt
-            _appLockState.value = _appLockState.value.copy(
-                locked = !ok || backgroundedDuringVerify,
-                pinError = !ok,
-            )
+            if (ok) {
+                pinFailureCount = 0
+                if (_appLockState.value.lockoutUntilMillis != 0L) {
+                    settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, "0"))
+                }
+                _appLockState.value = _appLockState.value.copy(
+                    locked = backgroundedDuringVerify,
+                    pinError = false,
+                    lockoutUntilMillis = 0L,
+                )
+            } else {
+                pinFailureCount += 1
+                if (pinFailureCount >= MAX_PIN_FAILURES) {
+                    val until = Instant.now(clock).toEpochMilli() + LOCKOUT_DURATION_MS
+                    pinFailureCount = 0
+                    settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, until.toString()))
+                    _appLockState.value = _appLockState.value.copy(
+                        locked = true,
+                        pinError = true,
+                        lockoutUntilMillis = until,
+                    )
+                } else {
+                    _appLockState.value = _appLockState.value.copy(
+                        locked = true,
+                        pinError = true,
+                    )
+                }
+            }
         }
     }
 
+    /** @deprecated Prefer [unlockWithPin]; kept as a thin alias for call sites. */
+    fun submitUnlockPin(pin: String) = unlockWithPin(pin)
+
     fun onBiometricUnlockSucceeded() {
-        _appLockState.value = _appLockState.value.copy(locked = false, pinError = false)
+        pinFailureCount = 0
+        _appLockState.value = _appLockState.value.copy(
+            locked = false,
+            pinError = false,
+            lockoutUntilMillis = 0L,
+        )
+        viewModelScope.launch {
+            settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, "0"))
+        }
     }
 
     fun clearPinError() {
@@ -241,6 +330,9 @@ class AppViewModel @Inject constructor(
 
     private val _pendingSharedText = MutableStateFlow<String?>(null)
     val pendingSharedText: StateFlow<String?> = _pendingSharedText.asStateFlow()
+
+    private val _csvExportState = MutableStateFlow<BackupUiState>(BackupUiState.Idle)
+    val csvExportState: StateFlow<BackupUiState> = _csvExportState.asStateFlow()
 
     fun offerSharedText(text: String?) {
         val trimmed = text?.trim().orEmpty()
@@ -341,6 +433,25 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    fun exportCsv(to: OutputStream) {
+        viewModelScope.launch {
+            _csvExportState.value = BackupUiState.Working
+            try {
+                val csv = withContext(Dispatchers.IO) { backupRepository.exportCsv() }
+                withContext(Dispatchers.IO) {
+                    to.bufferedWriter().use { it.write(csv) }
+                }
+                _csvExportState.value = BackupUiState.Exported(csv.length)
+            } catch (t: Throwable) {
+                _csvExportState.value = BackupUiState.Error(BackupErrorKind.EXPORT)
+            }
+        }
+    }
+
+    fun clearCsvExportState() {
+        _csvExportState.value = BackupUiState.Idle
+    }
+
     fun importBackup(from: InputStream) {
         viewModelScope.launch {
             _backupState.value = BackupUiState.Working
@@ -358,5 +469,10 @@ class AppViewModel @Inject constructor(
 
     fun clearBackupState() {
         _backupState.value = BackupUiState.Idle
+    }
+
+    private companion object {
+        const val MAX_PIN_FAILURES = 5
+        const val LOCKOUT_DURATION_MS = 60_000L
     }
 }

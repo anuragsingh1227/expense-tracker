@@ -53,6 +53,7 @@ import androidx.lifecycle.viewModelScope
 import com.expensetracker.R
 import com.expensetracker.data.db.entity.LabelRuleEntity
 import com.expensetracker.data.repository.TransactionRepository
+import com.expensetracker.domain.model.Money
 import com.expensetracker.domain.model.PaymentMode
 import com.expensetracker.domain.model.Transaction
 import com.expensetracker.domain.model.TransactionType
@@ -63,12 +64,15 @@ import com.expensetracker.ui.components.LoadingBlock
 import com.expensetracker.ui.components.MetaRow
 import com.expensetracker.ui.components.StatusPill
 import com.expensetracker.ui.components.SurfaceCard
+import com.expensetracker.ui.components.maskableFormatInr
 import com.expensetracker.ui.theme.ExpenseColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.ZoneId
 import javax.inject.Inject
 
 @HiltViewModel
@@ -251,6 +255,17 @@ fun TransactionDetailScreen(
         var category by remember(current.id, current.category) { mutableStateOf(current.category) }
         var type by remember(current.id, current.type) { mutableStateOf(current.type) }
         var notes by remember(current.id) { mutableStateOf(current.notes.orEmpty()) }
+        var amountText by remember(current.id, current.amount) {
+            mutableStateOf(current.amount.amount.stripTrailingZeros().toPlainString())
+        }
+        var merchantText by remember(current.id, current.merchant) {
+            mutableStateOf(current.merchant.orEmpty())
+        }
+        var dateText by remember(current.id, current.timestamp) {
+            mutableStateOf(
+                current.timestamp.atZone(ZoneId.systemDefault()).toLocalDate().toString(),
+            )
+        }
         var rememberMerchant by remember(current.id) { mutableStateOf(true) }
 
         var showLabelForm by remember(current.id) { mutableStateOf(false) }
@@ -318,7 +333,7 @@ fun TransactionDetailScreen(
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    current.amount.formatInr(),
+                    current.amount.maskableFormatInr(),
                     style = MaterialTheme.typography.displaySmall,
                     fontWeight = FontWeight.Bold,
                     color = if (isCredit) ExpenseColors.Income else ExpenseColors.Coral,
@@ -327,6 +342,35 @@ fun TransactionDetailScreen(
                 Text(
                     current.merchant ?: current.category,
                     style = MaterialTheme.typography.titleLarge,
+                )
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = { amountText = it.filter { c -> c.isDigit() || c == '.' } },
+                    label = { Text(stringResource(R.string.label_amount)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    prefix = { Text("₹") },
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = merchantText,
+                    onValueChange = { merchantText = it },
+                    label = { Text(stringResource(R.string.label_merchant)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = dateText,
+                    onValueChange = { dateText = it },
+                    label = { Text(stringResource(R.string.label_date)) },
+                    supportingText = { Text(stringResource(R.string.label_date_hint)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
                 )
             }
 
@@ -548,8 +592,25 @@ fun TransactionDetailScreen(
             ) {
                 Button(
                     onClick = {
+                        val parsedAmount = runCatching {
+                            Money.ofRupees(amountText.trim())
+                        }.getOrNull()
+                        val parsedDate = runCatching {
+                            LocalDate.parse(dateText.trim())
+                        }.getOrNull()
+                        if (parsedAmount == null || parsedAmount.amount.signum() <= 0) return@Button
+                        if (parsedDate == null) return@Button
+                        val zone = ZoneId.systemDefault()
+                        val oldLocal = current.timestamp.atZone(zone)
+                        val newTimestamp = parsedDate
+                            .atTime(oldLocal.toLocalTime())
+                            .atZone(zone)
+                            .toInstant()
                         viewModel.save(
                             current.copy(
+                                amount = parsedAmount,
+                                merchant = merchantText.trim().takeIf { it.isNotEmpty() },
+                                timestamp = newTimestamp,
                                 category = category.trim().ifEmpty { current.category },
                                 notes = notes.trim().ifEmpty { null },
                                 type = type,

@@ -73,6 +73,8 @@ fun SettingsScreen(
     onDisableAppLock: (String, (Boolean) -> Unit) -> Unit = { _, onResult -> onResult(false) },
     onSetAppLockBiometricEnabled: (Boolean) -> Unit = {},
     onPermissionsChanged: () -> Unit = {},
+    onExportCsv: (java.io.OutputStream) -> Unit = {},
+    csvExportState: BackupUiState = BackupUiState.Idle,
 ) {
     val ctx = LocalContext.current
     val autoSms = AppFeatures.autoSms
@@ -83,6 +85,11 @@ fun SettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val nameSavedMessage = stringResource(R.string.settings_owner_name_saved)
+    val versionName = remember {
+        runCatching {
+            ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName
+        }.getOrNull().orEmpty()
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -102,6 +109,13 @@ fun SettingsScreen(
             )
         }
         ctx.contentResolver.openOutputStream(uri)?.use(onExportBackup)
+    }
+
+    val createCsv = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(BackupRepository.CSV_MIME_TYPE),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        ctx.contentResolver.openOutputStream(uri)?.use(onExportCsv)
     }
 
     val openBackup = rememberLauncherForActivityResult(
@@ -184,6 +198,9 @@ fun SettingsScreen(
                 shape = RoundedCornerShape(14.dp),
             ) { Text(stringResource(R.string.action_save)) }
         }
+
+        BudgetsSettingsCard()
+        LabelRulesSettingsCard()
 
         SurfaceCard {
             Text(stringResource(R.string.settings_paste_title), style = MaterialTheme.typography.titleMedium)
@@ -397,6 +414,45 @@ fun SettingsScreen(
                 }
                 BackupUiState.Idle -> Unit
             }
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = {
+                    val name = "${BackupRepository.CSV_FILE_PREFIX}-${LocalDate.now()}.csv"
+                    createCsv.launch(name)
+                },
+                enabled = csvExportState !is BackupUiState.Working,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp),
+                shape = RoundedCornerShape(14.dp),
+            ) { Text(stringResource(R.string.export_csv)) }
+            when (val state = csvExportState) {
+                is BackupUiState.Working -> {
+                    Spacer(Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.backup_working), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                is BackupUiState.Exported -> {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        stringResource(R.string.export_csv_done),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
+                is BackupUiState.Error -> {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        stringResource(R.string.export_csv_failed),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                else -> Unit
+            }
         }
 
         SurfaceCard {
@@ -404,6 +460,29 @@ fun SettingsScreen(
             Spacer(Modifier.height(6.dp))
             Text(
                 stringResource(R.string.settings_privacy_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        SurfaceCard {
+            Text(stringResource(R.string.settings_about_title), style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                stringResource(R.string.app_name),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            if (versionName.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    stringResource(R.string.settings_about_version, versionName),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                stringResource(R.string.settings_about_body),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

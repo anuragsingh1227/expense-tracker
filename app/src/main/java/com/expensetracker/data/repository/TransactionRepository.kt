@@ -26,8 +26,11 @@ data class CategorySpend(val category: String, val amount: Money)
 interface TransactionRepository {
     /** Returns true if a new row was inserted; false if it was a duplicate. */
     suspend fun insertIfNew(tx: Transaction): Boolean
+    /** Inserts a user-created transaction (always a new row). Returns the new id. */
+    suspend fun insertManual(tx: Transaction): Long
     suspend fun update(tx: Transaction)
     suspend fun delete(id: Long)
+    suspend fun deleteIds(ids: Collection<Long>)
     suspend fun find(id: Long): Transaction?
     fun observeRecent(limit: Int = 20): Flow<List<Transaction>>
     fun observeAll(): Flow<List<Transaction>>
@@ -69,9 +72,19 @@ class TransactionRepositoryImpl @Inject constructor(
         return id != -1L
     }
 
+    override suspend fun insertManual(tx: Transaction): Long {
+        val id = dao.insert(tx.toEntity())
+        return if (id != -1L) id else dao.findByHash(tx.dedupeHash)?.id ?: -1L
+    }
+
     override suspend fun update(tx: Transaction) = dao.update(tx.toEntity())
 
     override suspend fun delete(id: Long) = dao.deleteById(id)
+
+    override suspend fun deleteIds(ids: Collection<Long>) {
+        if (ids.isEmpty()) return
+        ids.chunked(200).forEach { dao.deleteByIds(it) }
+    }
 
     override suspend fun find(id: Long): Transaction? = dao.findById(id)?.toDomain()
 

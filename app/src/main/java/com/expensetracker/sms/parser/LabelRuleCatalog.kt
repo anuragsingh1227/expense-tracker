@@ -2,6 +2,8 @@ package com.expensetracker.sms.parser
 
 import com.expensetracker.data.db.dao.LabelRuleDao
 import com.expensetracker.data.db.entity.LabelRuleEntity
+import com.expensetracker.data.repository.TransactionRepository
+import kotlinx.coroutines.flow.first
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -66,6 +68,26 @@ class LabelRuleCatalog @Inject constructor(
     suspend fun delete(id: Long) {
         labelRuleDao.delete(id)
         refresh()
+    }
+
+    fun observeAll() = labelRuleDao.observeAll()
+
+    /**
+     * Re-applies every rule to past transactions that the user has not manually
+     * edited. Returns how many rows had their category updated.
+     */
+    suspend fun applyToPast(repository: TransactionRepository): Int {
+        refresh()
+        val txs = repository.search(null).first()
+        var updated = 0
+        for (tx in txs) {
+            if (tx.manuallyEdited) continue
+            val label = match(tx.sender, tx.rawSms.orEmpty(), tx.merchant) ?: continue
+            if (label == tx.category) continue
+            repository.update(tx.copy(category = label))
+            updated++
+        }
+        return updated
     }
 
     suspend fun replaceAll(rows: List<LabelRuleEntity>) {

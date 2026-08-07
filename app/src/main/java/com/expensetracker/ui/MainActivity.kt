@@ -45,6 +45,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -70,6 +71,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.expensetracker.AppFeatures
 import com.expensetracker.R
+import com.expensetracker.ui.components.LocalAmountsHidden
+import com.expensetracker.ui.screen.AddTransactionScreen
 import com.expensetracker.ui.screen.DashboardScreen
 import com.expensetracker.ui.screen.SettingsScreen
 import com.expensetracker.ui.screen.TransactionDetailScreen
@@ -173,7 +176,8 @@ private fun AppRoot(
             biometricAvailable = appLockState.biometricAvailable,
             biometricEnabled = appLockState.biometricEnabled,
             pinError = appLockState.pinError,
-            onSubmitPin = { appViewModel.submitUnlockPin(it) },
+            lockoutUntilMillis = appLockState.lockoutUntilMillis,
+            onSubmitPin = { appViewModel.unlockWithPin(it) },
             onPinChanged = { appViewModel.clearPinError() },
             onBiometricUnlocked = { appViewModel.onBiometricUnlockSucceeded() },
         )
@@ -196,6 +200,9 @@ private fun AppRoot(
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
 
+    val amountsHidden by appViewModel.amountsHidden.collectAsState()
+
+    CompositionLocalProvider(LocalAmountsHidden provides amountsHidden) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
@@ -243,15 +250,21 @@ private fun AppRoot(
                 DashboardScreen(
                     onOpenTransaction = { nav.navigate("transaction/$it") },
                     onOpenSettings = { nav.navigate(Tab.Settings.route) },
+                    amountsHidden = amountsHidden,
+                    onToggleAmountsHidden = { appViewModel.toggleAmountsHidden() },
                 )
             }
             composable(Tab.Transactions.route) {
-                TransactionsScreen(onOpenTransaction = { nav.navigate("transaction/$it") })
+                TransactionsScreen(
+                    onOpenTransaction = { nav.navigate("transaction/$it") },
+                    onAddTransaction = { nav.navigate("add_transaction") },
+                )
             }
             composable(Tab.Settings.route) {
                 val scanning by appViewModel.scanning.collectAsState()
                 val lastScan by appViewModel.lastScan.collectAsState()
                 val backupState by appViewModel.backupState.collectAsState()
+                val csvExportState by appViewModel.csvExportState.collectAsState()
                 val cleanupRemoved by appViewModel.cleanupRemoved.collectAsState()
                 val settingsOwnerName by appViewModel.ownerName.collectAsState()
                 val settingsAppLockState by appViewModel.appLockState.collectAsState()
@@ -262,6 +275,8 @@ private fun AppRoot(
                     backupState = backupState,
                     onExportBackup = { appViewModel.exportBackup(it) },
                     onImportBackup = { appViewModel.importBackup(it) },
+                    csvExportState = csvExportState,
+                    onExportCsv = { appViewModel.exportCsv(it) },
                     onPurgeSpam = { appViewModel.purgeSpam() },
                     cleanupRemoved = cleanupRemoved,
                     onImportSmsText = { appViewModel.importSmsTexts(it) },
@@ -290,8 +305,12 @@ private fun AppRoot(
                 val id = entry.arguments?.getString("id")?.toLongOrNull() ?: return@composable
                 TransactionDetailScreen(transactionId = id, onBack = { nav.popBackStack() })
             }
+            composable("add_transaction") {
+                AddTransactionScreen(onBack = { nav.popBackStack() })
+            }
         }
     }
+    } // CompositionLocalProvider
 }
 
 /** Shown briefly while Settings (app-lock state, owner name) are read from Room. */

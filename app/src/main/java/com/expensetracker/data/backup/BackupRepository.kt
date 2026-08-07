@@ -1,8 +1,14 @@
 package com.expensetracker.data.backup
 
+import com.expensetracker.data.AppSettings
+import com.expensetracker.data.OwnerNameProvider
+import com.expensetracker.data.db.dao.BudgetDao
+import com.expensetracker.data.db.dao.SettingsDao
 import com.expensetracker.data.db.dao.TransactionDao
+import com.expensetracker.data.db.entity.BudgetEntity
 import com.expensetracker.data.db.entity.LabelRuleEntity
 import com.expensetracker.data.db.entity.MerchantEntity
+import com.expensetracker.data.db.entity.SettingsEntity
 import com.expensetracker.data.db.entity.TransactionEntity
 import com.expensetracker.sms.parser.LabelRuleCatalog
 import com.expensetracker.sms.parser.MerchantCatalog
@@ -19,10 +25,13 @@ data class BackupImportResult(
     val transactionsSkipped: Int,
     val merchantsRestored: Int,
     val labelRulesRestored: Int = 0,
+    val budgetsRestored: Int = 0,
+    val settingsRestored: Int = 0,
 )
 
 /**
- * JSON backup of transactions + learned merchant categories + label rules.
+ * JSON backup of transactions + learned merchants + label rules + budgets +
+ * selected settings (owner name, app lock, amounts hidden).
  * Write/read via the system document picker — pick Google Drive there
  * to sync across phones without giving this app internet access.
  */
@@ -31,6 +40,9 @@ class BackupRepository @Inject constructor(
     private val transactionDao: TransactionDao,
     private val merchantCatalog: MerchantCatalog,
     private val labelRuleCatalog: LabelRuleCatalog,
+    private val budgetDao: BudgetDao,
+    private val settingsDao: SettingsDao,
+    private val ownerNameProvider: OwnerNameProvider,
     private val clock: Clock,
 ) {
 
@@ -88,7 +100,48 @@ class BackupRepository @Inject constructor(
             )
         }
         root.put("labelRules", labelArray)
+
+        val budgetArray = JSONArray()
+        budgetDao.getAll().forEach { b ->
+            budgetArray.put(
+                JSONObject()
+                    .put("category", b.category)
+                    .put("monthlyLimit", b.monthlyLimit.toPlainString())
+                    .put("startsAt", b.startsAt.toEpochMilli()),
+            )
+        }
+        root.put("budgets", budgetArray)
+
+        val settingsObj = JSONObject()
+        SETTINGS_KEYS.forEach { key ->
+            settingsDao.get(key)?.let { settingsObj.put(key, it) }
+        }
+        root.put("settings", settingsObj)
+
         return root.toString(2)
+    }
+
+    /** CSV of all transactions for spreadsheet tools. */
+    suspend fun exportCsv(): String {
+        val header = listOf(
+            "timestamp", "type", "amount", "merchant", "category", "bank",
+            "paymentMode", "notes", "reference", "sender",
+        ).joinToString(",")
+        val rows = transactionDao.getAllOnce().map { tx ->
+            listOf(
+                Instant.ofEpochMilli(tx.timestamp.toEpochMilli()).toString(),
+                tx.type,
+                tx.amount.toPlainString(),
+                csvEscape(tx.merchant),
+                csvEscape(tx.category),
+                csvEscape(tx.bank),
+                tx.paymentMode,
+                csvEscape(tx.notes),
+                csvEscape(tx.referenceNumber),
+                csvEscape(tx.sender),
+            ).joinToString(",")
+        }
+        return (listOf(header) + rows).joinToString("\n")
     }
 
     suspend fun importJson(json: String): BackupImportResult {
@@ -155,18 +208,74 @@ class BackupRepository @Inject constructor(
             labelRuleCatalog.replaceAll(labelRules)
         }
 
+        var budgetsRestored = 0
+        val budgetArray = root.optJSONArray("budgets") ?: JSONArray()
+        if (budgetArray.length() > 0) {
+            budgetDao.deleteAll()
+            for (i in 0 until budgetArray.length()) {
+                val o = budgetArray.getJSONObject(i)
+                budgetDao.upsert(
+                    BudgetEntity(
+                        category = o.getString("category"),
+                        monthlyLimit = BigDecimal(o.getString("monthlyLimit")),
+                        startsAt = Instant.ofEpochMilli(o.getLong("startsAt")),
+                    ),
+                )
+                budgetsRestored++
+            }
+        }
+
+        var settingsRestored = 0
+        val settingsObj = root.optJSONObject("settings")
+        if (settingsObj != null) {
+            val entities = mutableListOf<SettingsEntity>()
+            SETTINGS_KEYS.forEach { key ->
+                if (settingsObj.has(key) && !settingsObj.isNull(key)) {
+                    entities += SettingsEntity(key, settingsObj.getString(key))
+                    settingsRestored++
+                }
+            }
+            if (entities.isNotEmpty()) {
+                settingsDao.putAll(entities)
+                ownerNameProvider.refresh()
+            }
+        }
+
         return BackupImportResult(
             transactionsInserted = inserted,
             transactionsSkipped = skipped,
             merchantsRestored = merchants.size,
             labelRulesRestored = labelRules.size,
+            budgetsRestored = budgetsRestored,
+            settingsRestored = settingsRestored,
         )
     }
 
     companion object {
-        const val VERSION = 2
+        const val VERSION = 3
         const val MIME_TYPE = "application/json"
+        const val CSV_MIME_TYPE = "text/csv"
         const val FILE_PREFIX = "expense-tracker-backup"
+        const val CSV_FILE_PREFIX = "expense-tracker-export"
+
+        /** Settings included in backup (never scan watermarks). */
+        val SETTINGS_KEYS = listOf(
+            AppSettings.OWNER_NAME,
+            AppSettings.APP_LOCK_ENABLED,
+            AppSettings.APP_LOCK_PIN_HASH,
+            AppSettings.APP_LOCK_PIN_SALT,
+            AppSettings.APP_LOCK_BIOMETRIC_ENABLED,
+            AppSettings.AMOUNTS_HIDDEN,
+        )
+    }
+}
+
+private fun csvEscape(value: String?): String {
+    val raw = value.orEmpty()
+    return if (raw.contains(',') || raw.contains('"') || raw.contains('\n')) {
+        "\"" + raw.replace("\"", "\"\"") + "\""
+    } else {
+        raw
     }
 }
 
