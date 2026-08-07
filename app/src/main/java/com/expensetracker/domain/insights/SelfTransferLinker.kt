@@ -10,16 +10,15 @@ import java.time.Duration
  * removed from Activity (they're already excluded from spend/income totals via
  * the `Transfer` category — this only declutters the list).
  *
- * Candidates are restricted to transactions the parser already categorized as
- * [Categories.TRANSFER]. This is the key safety property: an unrelated spend
- * (e.g. a Food debit) or unrelated income can never be swept up just because it
- * happens to share an amount and a time window with a real transfer — it's
- * simply not in the candidate pool.
+ * Matching rules (in order):
+ * 1. **Shared bank reference/UTR/UPI id** across any non-manually-edited
+ *    debit↔credit of equal amount in the time window — authoritative. Safe
+ *    even when an older parse miscategorized a leg (e.g. UPI self-move booked
+ *    as spend before Transfer detection improved).
+ * 2. Within rows already categorized [Categories.TRANSFER], the weaker
+ *    "owner name mentioned" heuristic as a fallback when no reference exists.
  *
- * Within that pool, a pair sharing the same bank-assigned reference/UTR is an
- * authoritative match (both legs of one transfer always cite the same
- * reference) and is preferred over the weaker "owner name mentioned somewhere"
- * heuristic, which is used only as a fallback for legs without a reference.
+ * Unrelated same-amount spends without a shared reference are never paired.
  */
 object SelfTransferLinker {
 
@@ -44,32 +43,47 @@ object SelfTransferLinker {
         window: Duration = MATCH_WINDOW,
     ): List<PairMatch> {
         val nameHints = ownerNames.map { it.trim().uppercase() }.filter { it.length >= 2 }
+        val editable = transactions.filter { !it.manuallyEdited }
+        val allDebits = editable.filter { it.type == TransactionType.DEBIT }.sortedBy { it.timestamp }
+        val allCredits = editable.filter { it.type == TransactionType.CREDIT }.sortedBy { it.timestamp }
 
-        val candidates = transactions.filter { it.category == Categories.TRANSFER && !it.manuallyEdited }
-        val debits = candidates.filter { it.type == TransactionType.DEBIT }.sortedBy { it.timestamp }
-        val credits = candidates.filter { it.type == TransactionType.CREDIT }.sortedBy { it.timestamp }
-
+        val usedDebitIds = mutableSetOf<Long>()
         val usedCreditIds = mutableSetOf<Long>()
         val pairs = mutableListOf<PairMatch>()
 
-        for (debit in debits) {
-            val candidatesForDebit = credits.filter { credit ->
-                credit.id !in usedCreditIds && amountsEqual(debit, credit) && withinWindow(debit, credit, window)
-            }
-            if (candidatesForDebit.isEmpty()) continue
+        // Pass 1: shared reference — authoritative across any category.
+        for (debit in allDebits) {
+            val ref = debit.referenceNumber?.takeIf { it.isNotBlank() } ?: continue
+            val match = allCredits.firstOrNull { credit ->
+                credit.id !in usedCreditIds &&
+                    credit.referenceNumber == ref &&
+                    amountsEqual(debit, credit) &&
+                    withinWindow(debit, credit, window)
+            } ?: continue
+            usedDebitIds += debit.id
+            usedCreditIds += match.id
+            pairs += PairMatch(debit = debit, credit = match)
+        }
 
-            // Prefer a shared reference/UTR — authoritative, no ambiguity.
-            val referenceMatch = debit.referenceNumber
-                ?.takeIf { it.isNotBlank() }
-                ?.let { ref -> candidatesForDebit.firstOrNull { it.referenceNumber == ref } }
-
-            val match = referenceMatch
-                ?: candidatesForDebit
-                    .filter { nameHints.isNotEmpty() && mentionsOwner(debit, it, nameHints) }
-                    // Weaker signal: prefer the closest-in-time candidate, not just the first.
-                    .minByOrNull { Duration.between(debit.timestamp, it.timestamp).abs() }
+        // Pass 2: Transfer-category + owner-name heuristic (no shared ref).
+        val transferDebits = allDebits.filter {
+            it.id !in usedDebitIds && it.category == Categories.TRANSFER
+        }
+        val transferCredits = allCredits.filter {
+            it.id !in usedCreditIds && it.category == Categories.TRANSFER
+        }
+        for (debit in transferDebits) {
+            if (debit.referenceNumber?.isNotBlank() == true) continue
+            val match = transferCredits
+                .filter { credit ->
+                    credit.id !in usedCreditIds &&
+                        amountsEqual(debit, credit) &&
+                        withinWindow(debit, credit, window) &&
+                        nameHints.isNotEmpty() &&
+                        mentionsOwner(debit, credit, nameHints)
+                }
+                .minByOrNull { Duration.between(debit.timestamp, it.timestamp).abs() }
                 ?: continue
-
             usedCreditIds += match.id
             pairs += PairMatch(debit = debit, credit = match)
         }

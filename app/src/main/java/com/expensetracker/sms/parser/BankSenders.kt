@@ -13,6 +13,7 @@ object BankSenders {
         Regex("AXIS(BK|B|SMS)?", RegexOption.IGNORE_CASE) to "Axis",
         Regex("KOTAK(B|BK)?", RegexOption.IGNORE_CASE) to "Kotak",
         Regex("IDFC(FB|B|BK)?", RegexOption.IGNORE_CASE) to "IDFC First",
+        Regex("IDBI(BK|B)?", RegexOption.IGNORE_CASE) to "IDBI",
         Regex("PNB(SMS|B)?", RegexOption.IGNORE_CASE) to "PNB",
         Regex("BOB(SMS|BNK|IB)?", RegexOption.IGNORE_CASE) to "Bank of Baroda",
         Regex("CANBNK|CANARA", RegexOption.IGNORE_CASE) to "Canara",
