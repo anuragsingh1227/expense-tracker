@@ -148,6 +148,17 @@ object SampleSms {
     const val OWN_ACCOUNT_NEFT_CREDIT_ANURAG =
         "Credit INR 17383.00\nICICI Bank A/c XX293\n15-06-26 20:45:10\nNEFT/MB/AXOMB16602145999/V ANURAG SINGH"
 
+    /**
+     * Card-side "thank you for payment" confirmation of a credit-card auto-debit —
+     * duplicates the bank-side debit SMS below; must be ignored entirely.
+     */
+    const val CARD_AUTODEBIT_THANK_YOU_DUPLICATE =
+        "Dear Customer, thank you for your payment of INR 29,004.46 towards ICICI Bank Credit Card Account XX4104 through Auto Debit from Account XX6293 on 02-Jun-26"
+
+    /** Bank-side debit SMS for the same auto-debit — this is the one to keep, as Transfer. */
+    const val ICICI_ACC_DEBITED_ATD_AUTO_DEBIT =
+        "ICICI Bank Acc XX293 debited Rs. 29,004.46 on 02-Jun-26 InfoATD*Auto Debi.Avl Bal Rs. 3,12,078.24.To dispute call 18002662 or SMS BLOCK 293 to 9215676766"
+
     /** Multi-month batch for ledger / paste-import tests (blank-line separated). */
     const val LEDGER_BATCH = """
 INR 52000.00 credited to A/c XXXX9876 on 01-Jul-26 by NEFT Salary. Avl Bal Rs 80,000.00

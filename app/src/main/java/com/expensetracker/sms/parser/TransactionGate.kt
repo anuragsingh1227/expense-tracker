@@ -81,6 +81,13 @@ object TransactionGate {
         Regex("""\bACCOUNT\s+.*\bOPENED\s+SUCCESSFULLY\b""", RegexOption.IGNORE_CASE),
         Regex("""\bHAS\s+BEEN\s+DELIVERED\b""", RegexOption.IGNORE_CASE),
         Regex("""\bOVERDRAFT\s+FACILITY\s+HAS\s+BEEN\s+SANCTIONED\b""", RegexOption.IGNORE_CASE),
+        // Card-side "thank you for your payment ... towards ... Credit Card ... through
+        // Auto Debit" confirmation duplicates the source account's own debit SMS —
+        // keep only the bank-side debit as the ledger record.
+        Regex(
+            """(?=.*\bTHANK\s+YOU\s+FOR\s+YOUR\s+PAYMENT\b)(?=.*\bCREDIT\s+CARD\b)(?=.*\bAUTO\s+DEBIT\b)""",
+            RegexOption.IGNORE_CASE,
+        ),
     )
 
     /**
@@ -102,6 +109,9 @@ object TransactionGate {
         // Axis compact multi-line template: "Debit INR 17383.00\nAxis Bank A/c XX…"
         "DEBIT INR", "DEBIT RS", "DEBIT ₹",
         "TRANSFERRED TO",
+        // ICICI "Acc XX293 debited Rs. X on DATE Info..." — bare "debited" + amount,
+        // no with/for/from/via connector.
+        "DEBITED RS", "DEBITED INR", "DEBITED ₹",
     )
     private val STRONG_CREDIT = listOf(
         "HAS BEEN CREDITED", "BEEN CREDITED", "CREDITED WITH", "CREDITED TO", "CREDITED",

@@ -214,6 +214,8 @@ class SmsParser(
         if (upper.contains("CREDIT CARD BILL") || upper.contains("CC BILL")) return true
         // Axis compact card-bill template: "CRD-PMNT-530562****0887"
         if (upper.contains("CRD-PMNT") || upper.contains("CRD PMNT") || upper.contains("CRDPMNT")) return true
+        // ICICI narration code for automatic bill-payment debits: "InfoATD*Auto Debi"
+        if (ATD_AUTO_DEBIT.containsMatchIn(upper)) return true
         if (upper.contains("TOWARDS") && upper.contains("CARD")) return true
         if (upper.contains("PAYMENT TO") && (upper.contains("CREDIT CARD") || upper.contains(" CC "))) return true
         if (upper.contains("CREDITED TO YOUR CARD") || upper.contains("CREDITED TO YOUR CC")) return true
@@ -310,6 +312,11 @@ class SmsParser(
             Regex("""(?i)(?:\d[\d\s/-]{6,}\d)|(?:\b\d{4,}[-/]\d{4,}\b)""")
         /** Owner first-name hint used to spot own-account transfers in SMS text. */
         private val OWNER_NAME_HINT = Regex("""\bANURAG\b""", RegexOption.IGNORE_CASE)
+        /**
+         * ICICI's narration code for automatic bill-payment debits: "InfoATD*Auto Debi"
+         * (no word boundary before ATD — it's glued directly onto "Info" in the SMS).
+         */
+        private val ATD_AUTO_DEBIT = Regex("""ATD\s*\*?\s*AUTO\s*DEBI""", RegexOption.IGNORE_CASE)
         private val REFERENCE_PATTERNS = listOf(
             Regex("""(?i)(?:ref(?:erence)?(?:\s*no)?\.?|txn(?:\s*id)?\.?|utr)[:\s#]*([A-Z0-9]{6,})"""),
             Regex("""(?i)UPI(?:\s*ref)?[:\s]*([0-9]{9,})"""),

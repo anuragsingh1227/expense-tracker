@@ -1,5 +1,6 @@
 package com.expensetracker.sms.parser
 
+import com.expensetracker.domain.insights.LedgerBuckets
 import com.expensetracker.domain.model.PaymentMode
 import com.expensetracker.domain.model.TransactionType
 import com.google.common.truth.Truth.assertThat
@@ -262,6 +263,21 @@ class SmsParserTest {
         assertThat(tx.type).isEqualTo(TransactionType.DEBIT)
         assertThat(tx.amount.amount).isEqualTo(BigDecimal("3868.40"))
         assertThat(tx.category).isEqualTo(Categories.TRANSFER)
+    }
+
+    @Test
+    fun `card-side thank-you-for-payment auto-debit confirmation is ignored (duplicate)`() {
+        assertThat(parser.isTransactional(SampleSms.CARD_AUTODEBIT_THANK_YOU_DUPLICATE)).isFalse()
+        assertThat(parser.parse(raw("AD-ICICIT-S", SampleSms.CARD_AUTODEBIT_THANK_YOU_DUPLICATE))).isNull()
+    }
+
+    @Test
+    fun `ICICI bank-side ATD auto-debit is the kept record, parsed as Transfer`() {
+        val tx = parser.parse(raw("AD-ICICIT-S", SampleSms.ICICI_ACC_DEBITED_ATD_AUTO_DEBIT))!!
+        assertThat(tx.type).isEqualTo(TransactionType.DEBIT)
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("29004.46"))
+        assertThat(tx.category).isEqualTo(Categories.TRANSFER)
+        assertThat(LedgerBuckets.isSpend(tx)).isFalse()
     }
 
     @Test
