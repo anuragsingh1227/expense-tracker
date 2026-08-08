@@ -34,9 +34,28 @@ object SampleSms {
     const val IMPS_SELF_TRANSFER =
         "Acct XX126 debited with INR 4,600.00 on 23-Jul-2026 & Acct XX791 credited. IMPS: XXX410XX."
 
-    /** Card account credit for a bill payment — not spend income. */
+    /**
+     * Card-side bill-payment posting — duplicate of the bank debit SMS.
+     * Must be ignored entirely (not booked as Transfer/income/spend).
+     */
     const val CARD_PAYMENT_CREDITED =
         "Dear bank cardmember, Payment of Rs 2487 was credited to your card ending 1234 on 05/Aug/2026."
+
+    /** Issuer acknowledgement — not a ledger movement. */
+    const val WE_RECEIVED_PAYMENT_CREDIT_CARD =
+        "Dear Customer, we have received payment of INR 12,500.00 towards your Credit Card XX1014 on 08-08-26. Thank you."
+
+    /** Issuer posting ack without "received"/"thank you" — still not a bank movement. */
+    const val CARD_PAYMENT_POSTED_ACK =
+        "Dear Customer, payment of INR 8,000.00 towards your Credit Card XX1014 has been posted on 08-08-26. Avl limit Rs 42,000.00"
+
+    /** Merchant/third-party ack mentioning the card rail — not a ledger movement. */
+    const val MERCHANT_RECEIVED_PAYMENT_FROM_CARD =
+        "We have received payment from credit card ending 4321 for Rs 1,299.00 at FLIPKART on 15-04-24. Order confirmed."
+
+    /** Generic biller "payment received successfully" — not a bank movement. */
+    const val BILLER_PAYMENT_RECEIVED_SUCCESS =
+        "Payment of Rs 899.00 received successfully for your electricity bill. Ref BBPS123456."
 
     /** Public DLT-style spend alert (SMS Gateway Center sample shape). */
     const val CARD_SPENT_JIO =

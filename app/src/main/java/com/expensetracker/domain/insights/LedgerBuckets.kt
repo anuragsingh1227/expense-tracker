@@ -8,6 +8,9 @@ import com.expensetracker.sms.parser.Categories
 /**
  * In-memory mirrors of [com.expensetracker.data.db.dao.TransactionDao] spend/income/
  * investment filters. Keep these identical to the SQL `NOT IN` / `=` clauses.
+ *
+ * Bucket rules implement [LedgerPolicy]: spend excludes transfers/investments;
+ * income excludes transfers/refunds; refunds net against spend.
  */
 object LedgerBuckets {
 

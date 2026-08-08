@@ -2,6 +2,11 @@ package com.expensetracker.sms.parser
 
 /**
  * Rejects OTPs, marketing, loan offers, and other non-ledger SMS before parsing.
+ *
+ * Ledger rule (see [com.expensetracker.domain.insights.LedgerPolicy]): only bank/card
+ * account *movements* become rows. Acknowledgements from card issuers, merchants, or
+ * other third parties ("we received your payment…") are not ledger facts — they
+ * duplicate the source account's own debit/credit SMS.
  */
 object TransactionGate {
 
@@ -81,13 +86,44 @@ object TransactionGate {
         Regex("""\bACCOUNT\s+.*\bOPENED\s+SUCCESSFULLY\b""", RegexOption.IGNORE_CASE),
         Regex("""\bHAS\s+BEEN\s+DELIVERED\b""", RegexOption.IGNORE_CASE),
         Regex("""\bOVERDRAFT\s+FACILITY\s+HAS\s+BEEN\s+SANCTIONED\b""", RegexOption.IGNORE_CASE),
-        // Card-side "thank you for your payment ... towards ... Credit Card ... through
-        // Auto Debit" confirmation duplicates the source account's own debit SMS —
-        // keep only the bank-side debit as the ledger record.
+        // --- Third-party / card-issuer payment acknowledgements (not ledger movements) ---
+        // "Thank you for your payment …" (any card/issuer/merchant ack). Distinct from
+        // spend alerts "Thank you for using … Credit Card … at MERCHANT".
+        Regex("""\bTHANK\s+YOU\s+FOR\s+(?:YOUR\s+)?PAYMENT\b""", RegexOption.IGNORE_CASE),
+        // "We have received your payment…" / "We've received payment of…" from
+        // card issuers, billers, or merchants — duplicates the bank debit SMS.
+        Regex("""\bWE(?:['’]VE|\s+HAVE)\s+RECEIVED\s+(?:YOUR\s+)?PAYMENT\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bRECEIVED\s+(?:YOUR\s+)?PAYMENT\s+(?:OF|FROM|TOWARDS|FOR|AGAINST)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bPAYMENT\s+(?:HAS\s+BEEN\s+|WAS\s+)?RECEIVED\s+(?:OF|FROM|TOWARDS|FOR|AGAINST|SUCCESSFULLY)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bPAYMENT\s+RECEIVED\s+SUCCESSFULLY\b""", RegexOption.IGNORE_CASE),
+        // "Payment of Rs X received successfully" (words between amount and verb).
+        Regex("""\bPAYMENT\b.{0,48}\bRECEIVED\s+SUCCESSFULLY\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bSUCCESSFULLY\s+RECEIVED\s+(?:YOUR\s+)?PAYMENT\b""", RegexOption.IGNORE_CASE),
+        // Card-side bill-payment posting: "Payment of Rs X was credited to your card…"
+        // — the savings/current debit SMS is the single ledger row to keep.
         Regex(
-            """(?=.*\bTHANK\s+YOU\s+FOR\s+YOUR\s+PAYMENT\b)(?=.*\bCREDIT\s+CARD\b)(?=.*\bAUTO\s+DEBIT\b)""",
+            """\bPAYMENT\b.{0,80}\bCREDITED\s+TO\s+YOUR\s+(?:CREDIT\s+)?CARD\b""",
             RegexOption.IGNORE_CASE,
         ),
+        Regex(
+            """\bCREDITED\s+TO\s+YOUR\s+(?:CREDIT\s+)?CARD\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+    )
+
+    private val PAYMENT_TOWARDS_CARD = Regex(
+        """\bPAYMENT\s+(?:OF|TOWARDS|FOR|AGAINST|TO)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val CREDIT_OR_YOUR_CARD = Regex(
+        """\b(?:CREDIT\s+CARD|YOUR\s+CARD)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+    /** Verbs that prove a real account/card money movement (keep as ledger). */
+    private val MOVEMENT_VERBS = listOf(
+        "DEBITED", "SPENT", "WITHDRAWN", "WITHDRAWAL", "PURCHASE",
+        "USED FOR", "HAS BEEN USED", "IS USED FOR", "WAS USED FOR",
+        "DEBIT INR", "DEBIT RS", "DEBIT ₹",
     )
 
     /**
@@ -115,7 +151,9 @@ object TransactionGate {
     )
     private val STRONG_CREDIT = listOf(
         "HAS BEEN CREDITED", "BEEN CREDITED", "CREDITED WITH", "CREDITED TO", "CREDITED",
-        "RECEIVED FROM", "RECEIVED RS", "DEPOSITED", "CR AMT", "CR/",
+        // "RECEIVED FROM" is OK here: third-party "received *payment* from …" acks are
+        // rejected earlier by the SPAM patterns above.
+        "RECEIVED FROM", "RECEIVED RS", "RECEIVED INR", "RECEIVED ₹", "DEPOSITED", "CR AMT", "CR/",
         // Refund / reversal SMS often skip "credited" entirely.
         "REFUNDED", "REFUND OF", "HAS BEEN REVERSED", "BEEN REVERSED", "REVERSED TO", "REVERSAL OF",
         // IDFC-style "Rs X received in your Account … from <vpa>" templates.
@@ -130,10 +168,24 @@ object TransactionGate {
         val upper = trimmed.uppercase()
         if (OTP.containsMatchIn(upper)) return false
         if (SPAM.any { it.containsMatchIn(trimmed) }) return false
+        // Issuer/biller "payment … towards your Credit Card" with no debit/spend verb —
+        // checked in code (not a search-position lookahead) so real BillPay debits stay.
+        if (isCardPaymentAckWithoutMovement(trimmed, upper)) return false
         if (!SmsAmountExtractor.AMOUNT_PATTERN.containsMatchIn(trimmed)) return false
         val debit = STRONG_DEBIT.any { upper.contains(it) }
         val credit = STRONG_CREDIT.any { upper.contains(it) }
         return debit || credit
+    }
+
+    /**
+     * Card-bill acknowledgements that mention payment + card but never move money
+     * on an account ("payment of X towards your Credit Card has been posted").
+     * Bank BillPay SMS include "debited" and must remain Transfer rows.
+     */
+    private fun isCardPaymentAckWithoutMovement(body: String, upper: String): Boolean {
+        if (!PAYMENT_TOWARDS_CARD.containsMatchIn(body)) return false
+        if (!CREDIT_OR_YOUR_CARD.containsMatchIn(body)) return false
+        return MOVEMENT_VERBS.none { upper.contains(it) }
     }
 
     fun looksLikeSpam(body: String): Boolean = !isTransactional(body)
