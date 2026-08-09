@@ -93,7 +93,9 @@ class SmsParser(
             upper.contains("WAS CREDITED") ||
             upper.contains("HAS BEEN CREDITED") ||
             upper.contains("CREDITED TO YOUR") ||
-            upper.contains("CREDITED WITH")
+            upper.contains("CREDITED WITH") ||
+            upper.contains("CASH DEPOSIT") ||
+            (upper.contains("CHEQUE") && upper.contains("CLEARED"))
         ) {
             return TransactionType.CREDIT
         }
@@ -455,6 +457,7 @@ class SmsParser(
         )
         private val CREDIT_WORDS = listOf(
             "CREDITED", "CREDIT", "RECEIVED", "REFUND", "DEPOSITED", "SALARY",
+            "CASH DEPOSIT", "CHEQUE CLEARED",
         )
         // "A/c XX8291" / "Acc XX293" / "Acct XX293" / "Account XX8291" (3–4 trailing digits).
         private val ACCOUNT_LAST4 = Regex(

@@ -210,6 +210,15 @@ object TransactionGate {
             """\bMANDATE\b.{0,80}\b(?:HAS\s+BEEN\s+)?RETURNED\b""",
             RegexOption.IGNORE_CASE,
         ),
+        // Card EMI conversion status — original spend SMS is the ledger row.
+        Regex(
+            """\b(?:HAS\s+BEEN\s+|WAS\s+)?CONVERTED\s+TO\s+EMI\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bEMI\s+OF\b.{0,48}\bSTARTS?\s+FROM\b""",
+            RegexOption.IGNORE_CASE,
+        ),
     )
 
     private val PAYMENT_TOWARDS_CARD = Regex(
@@ -249,6 +258,10 @@ object TransactionGate {
         // ICICI "Acc XX293 debited Rs. X on DATE Info..." — bare "debited" + amount,
         // no with/for/from/via connector.
         "DEBITED RS", "DEBITED INR", "DEBITED ₹",
+        // SBI: "A/c XX9876 debited by INR 350.00 …"
+        "DEBITED BY",
+        // SBI UPI: "Rs.450.00 transferred from A/c … to MERCHANT"
+        "TRANSFERRED FROM",
         // Mandate / auto-collect: "NACH debit towards SCRIPBOX… for INR … processed"
         // Axis compact: "ACH-DR-HDFC BANK LTD-47138"
         "NACH DEBIT", "ECS DEBIT", "ACH DEBIT", "ACH-DR", "ACH/DR", "DEBIT TOWARDS",
@@ -261,6 +274,9 @@ object TransactionGate {
      */
     private val AMOUNT_THEN_DEBITED = Regex(
         """(?i)(?:rs\.?|inr|₹)\s*[0-9,]+\.?\d*\s+debited\b""",
+    )
+    private val AMOUNT_THEN_TRANSFERRED = Regex(
+        """(?i)(?:rs\.?|inr|₹)\s*[0-9,]+\.?\d*\s+transferred\b""",
     )
     private val AMOUNT_THEN_CREDITED = Regex(
         """(?i)(?:rs\.?|inr|₹)\s*[0-9,]+\.?\d*\s+credited\b""",
@@ -276,6 +292,10 @@ object TransactionGate {
         "RECEIVED IN YOUR", "RECEIVED IN A/C", "RECEIVED IN ACCOUNT", "YOU HAVE RECEIVED",
         // Axis compact multi-line template: "Credit INR 5000.00\nAxis Bank A/c XX…"
         "CREDIT INR", "CREDIT RS", "CREDIT ₹",
+        // Cheque / cash inflows without the word "credited".
+        // Prefer CHEQUE_CLEARED / CASH_DEPOSIT regexes below for phrasing variants;
+        // keep only unambiguous substrings here.
+        "HAS BEEN CLEARED", "BEEN CLEARED", "CASH DEPOSIT", "DEPOSIT OF",
     )
 
     fun isTransactional(body: String): Boolean {
@@ -291,11 +311,21 @@ object TransactionGate {
         if (isInvestmentContributionAck(upper)) return false
         if (!SmsAmountExtractor.AMOUNT_PATTERN.containsMatchIn(trimmed)) return false
         val debit = STRONG_DEBIT.any { upper.contains(it) } ||
-            AMOUNT_THEN_DEBITED.containsMatchIn(trimmed)
+            AMOUNT_THEN_DEBITED.containsMatchIn(trimmed) ||
+            AMOUNT_THEN_TRANSFERRED.containsMatchIn(trimmed)
         val credit = STRONG_CREDIT.any { upper.contains(it) } ||
-            AMOUNT_THEN_CREDITED.containsMatchIn(trimmed)
+            AMOUNT_THEN_CREDITED.containsMatchIn(trimmed) ||
+            CASH_DEPOSIT.containsMatchIn(trimmed) ||
+            CHEQUE_CLEARED.containsMatchIn(trimmed)
         return debit || credit
     }
+
+    private val CASH_DEPOSIT = Regex(
+        """(?i)\bcash\s+deposit\b.{0,40}(?:rs\.?|inr|₹)""",
+    )
+    private val CHEQUE_CLEARED = Regex(
+        """(?i)\bcheque\b.{0,80}\b(?:has\s+been\s+|was\s+)?cleared\b""",
+    )
 
     /**
      * Investment vehicle thank-you / contribution-received SMS. Standing-instruction
