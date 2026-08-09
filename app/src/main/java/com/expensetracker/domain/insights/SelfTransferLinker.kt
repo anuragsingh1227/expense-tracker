@@ -53,11 +53,12 @@ object SelfTransferLinker {
 
         // Pass 1: shared reference — authoritative across any category.
         // Prefer stored referenceNumber; fall back to raw SMS for legacy rows.
+        // Also allow NEFT UTR prefix matches (ICICI truncates "IN12" vs full "IN1261…").
         for (debit in allDebits) {
             val ref = effectiveReference(debit) ?: continue
             val match = allCredits.firstOrNull { credit ->
                 credit.id !in usedCreditIds &&
-                    effectiveReference(credit) == ref &&
+                    referencesMatch(ref, effectiveReference(credit)) &&
                     amountsEqual(debit, credit) &&
                     withinWindow(debit, credit, window)
             } ?: continue
@@ -109,6 +110,21 @@ object SelfTransferLinker {
     fun idsToRemove(pairs: List<PairMatch>): List<Long> =
         pairs.flatMap { listOf(it.debit.id, it.credit.id) }.filter { it > 0 }
 
+    /**
+     * Exact UTR match, or one side is a truncated prefix of the other
+     * (ICICI `InfoBIL*NEFT*IN12` vs Axis `NEFT/IN12618244087080/…`).
+     */
+    internal fun referencesMatch(a: String?, b: String?): Boolean {
+        if (a.isNullOrBlank() || b.isNullOrBlank()) return false
+        if (a.equals(b, ignoreCase = true)) return true
+        val x = a.uppercase()
+        val y = b.uppercase()
+        val shorter = if (x.length <= y.length) x else y
+        val longer = if (x.length <= y.length) y else x
+        // Require a meaningful prefix (avoid matching "IN" alone).
+        return shorter.length >= 4 && longer.startsWith(shorter)
+    }
+
     private fun amountsEqual(a: Transaction, b: Transaction): Boolean =
         a.amount.amount.compareTo(b.amount.amount) == 0
 
@@ -139,6 +155,8 @@ object SelfTransferLinker {
         Regex("""(?i)UPI(?:\s*ref)?[:\s]*([0-9]{9,})"""),
         Regex("""(?i)UPI/[A-Z0-9]+/([0-9]{9,})"""),
         Regex("""(?i)(?:NEFT|IMPS|RTGS)/[A-Z0-9]{1,3}/([A-Z0-9]{8,})"""),
+        Regex("""(?i)(?:NEFT|IMPS|RTGS)/([A-Z0-9]{10,})/"""),
+        Regex("""(?i)BIL\s*\*?\s*NEFT\s*\*?\s*([A-Z0-9]{4,})"""),
         Regex("""(?i)(?:ref(?:erence)?\.?(?:\s*no\.?)?|txn(?:\s*id)?\.?|utr)[:\s#]*([A-Z0-9]{6,})"""),
     )
 }

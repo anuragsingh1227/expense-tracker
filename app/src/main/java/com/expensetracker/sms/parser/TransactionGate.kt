@@ -196,6 +196,20 @@ object TransactionGate {
             """\bTHANK\s+YOU\.\s*[A-Z0-9 ._-]+\.com\b""",
             RegexOption.IGNORE_CASE,
         ),
+        // Failed mandate — money never left (or was bounced). Not a ledger debit.
+        // "NACH debit … has been returned today" (distinct from "successfully processed").
+        Regex(
+            """\b(?:NACH|ECS|ACH)\b.{0,120}\bHAS\s+BEEN\s+RETURNED\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\b(?:NACH|ECS|ACH)\b.{0,120}\b(?:WAS\s+)?RETURNED\s+TODAY\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bMANDATE\b.{0,80}\b(?:HAS\s+BEEN\s+)?RETURNED\b""",
+            RegexOption.IGNORE_CASE,
+        ),
     )
 
     private val PAYMENT_TOWARDS_CARD = Regex(

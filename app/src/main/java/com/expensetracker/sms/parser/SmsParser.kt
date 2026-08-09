@@ -266,7 +266,8 @@ class SmsParser(
             // One-sided NEFT/IMPS/RTGS account move with no known merchant —
             // account-to-account transfer: shown in Activity, excluded from spend.
             (upper.contains("NEFT") || upper.contains("IMPS") || upper.contains("RTGS")) &&
-                (upper.contains("A/C") || upper.contains("ACCT") || upper.contains("ACCOUNT")) ->
+                (upper.contains("A/C") || upper.contains("ACCT") || upper.contains("ACCOUNT") ||
+                    Regex("""\bACC\b""").containsMatchIn(upper)) ->
                 Categories.TRANSFER
             type == TransactionType.CREDIT -> Categories.TRANSFER
             else -> Categories.OTHERS
@@ -304,6 +305,8 @@ class SmsParser(
         if (upper.contains("CRD-PMNT") || upper.contains("CRD PMNT") || upper.contains("CRDPMNT")) return true
         // ICICI narration code for automatic bill-payment debits: "InfoATD*Auto Debi"
         if (ATD_AUTO_DEBIT.containsMatchIn(upper)) return true
+        // ICICI NEFT outward via bill-pay rail: "InfoBIL*NEFT*IN12…" — Transfer, not spend.
+        if (BIL_NEFT.containsMatchIn(upper)) return true
         if (upper.contains("TOWARDS") && upper.contains("CARD")) return true
         if (upper.contains("PAYMENT TO") && (upper.contains("CREDIT CARD") || upper.contains(" CC "))) return true
         if (upper.contains("CREDITED TO YOUR CARD") || upper.contains("CREDITED TO YOUR CC")) return true
@@ -452,6 +455,7 @@ class SmsParser(
          * (no word boundary before ATD — it's glued directly onto "Info" in the SMS).
          */
         private val ATD_AUTO_DEBIT = Regex("""ATD\s*\*?\s*AUTO\s*DEBI""", RegexOption.IGNORE_CASE)
+        private val BIL_NEFT = Regex("""BIL\s*\*?\s*NEFT""", RegexOption.IGNORE_CASE)
         // Axis compact UPI: "UPI/P2A/111991242206/LALAWMPUII"
         private val UPI_PATH_PAYEE =
             Regex("""(?i)\bUPI/(?:P2A|P2M|P2P)/[0-9]{6,}/([A-Z][A-Z0-9 .&'*_-]{1,40})""")
@@ -489,6 +493,10 @@ class SmsParser(
             Regex("""(?i)UPI/[A-Z0-9]+/([0-9]{9,})"""),
             // Axis NEFT/IMPS compact template: "NEFT/MB/AXOMB16602145999/V" or "IMPS/P2A/…"
             Regex("""(?i)(?:NEFT|IMPS|RTGS)/[A-Z0-9]{1,3}/([A-Z0-9]{8,})"""),
+            // Axis credit: "NEFT/IN12618244087080/ANUR" (UTR directly after NEFT/)
+            Regex("""(?i)(?:NEFT|IMPS|RTGS)/([A-Z0-9]{10,})/"""),
+            // ICICI glued: "InfoBIL*NEFT*IN12618244087080" / truncated "InfoBIL*NEFT*IN12"
+            Regex("""(?i)BIL\s*\*?\s*NEFT\s*\*?\s*([A-Z0-9]{4,})"""),
             // Axis card-payment compact template: "CRD-PMNT-530562****0887"
             Regex("""(?i)CRD[- ]?PMNT[- ]?([A-Z0-9*]{6,})"""),
             // Axis ACH compact: "ACH-DR-HDFC BANK LTD-47138" → mandate/loan id
