@@ -147,6 +147,20 @@ object TransactionGate {
             """\bREFUND\b.{0,60}\bAGAINST\s+YOUR\s+INVESTMENT\b""",
             RegexOption.IGNORE_CASE,
         ),
+        // Outward transfer delivery ack: "Your NEFT txn … is credited to beneficiary …".
+        // The savings debit SMS is the single ledger row; this only confirms the other side.
+        Regex(
+            """\bCREDITED\s+TO\s+(?:THE\s+)?BENEFICIARY\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\b(?:NEFT|IMPS|RTGS|UPI)\s+TXN\b.{0,120}\bCREDITED\s+TO\s+BENEFICIARY\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bSUCCESSFULLY\s+CREDITED\s+TO\s+(?:THE\s+)?BENEFICIARY\b""",
+            RegexOption.IGNORE_CASE,
+        ),
     )
 
     private val PAYMENT_TOWARDS_CARD = Regex(

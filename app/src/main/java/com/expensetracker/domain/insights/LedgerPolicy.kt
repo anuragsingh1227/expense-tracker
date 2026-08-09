@@ -13,8 +13,9 @@ package com.expensetracker.domain.insights
  *
  * 2. **One economic event, one row.** Acknowledgements are **not** ledger entries:
  *    card-issuer/merchant "we have received your payment", "payment credited to
- *    your card", and investment "contribution received" (PPF/NPS/SIP) thank-yous.
- *    They duplicate the source debit or SI posting. Rejected in
+ *    your card", investment "contribution received" (PPF/NPS/SIP) thank-yous, and
+ *    outward "credited to beneficiary" NEFT/IMPS delivery acks. They duplicate the
+ *    source debit or SI posting. Rejected in
  *    [com.expensetracker.sms.parser.TransactionGate].
  *
  * 3. **Classify, don't double-count.** Card *purchases* are spend. Paying a card

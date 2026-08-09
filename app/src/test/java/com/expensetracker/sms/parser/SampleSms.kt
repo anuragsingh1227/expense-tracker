@@ -279,5 +279,12 @@ ACH-DR-HDFC BANK LTD-47138
 WhatsApp BAL to 917036165000
 Not You? SMS BLOCKALL CustID to 919951860002
 """.trimIndent()
+
+    /**
+     * Outward NEFT delivery confirmation to someone else's account — not a ledger
+     * movement on the sender's a/c (the debit SMS is the row to keep).
+     */
+    const val AXIS_NEFT_CREDITED_TO_BENEFICIARY =
+        "Your NEFT txn with Ref. No. AXOMB22002006227 for INR 10000.00 is credited to beneficiary Manju Singh, A/c no. XX5116 on 08-08-26 at 11:52:35 IST - Axis Bank"
 }
 

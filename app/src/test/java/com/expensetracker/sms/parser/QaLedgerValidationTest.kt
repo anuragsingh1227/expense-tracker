@@ -67,4 +67,12 @@ class QaLedgerValidationTest {
         assertThat(parser.isTransactional(SampleSms.SBI_CARD_PAYMENT_RECEIVED_AGAINST)).isFalse()
         assertThat(parser.parse(RawSms("VM-SBICRD", SampleSms.SBI_CARD_PAYMENT_RECEIVED_AGAINST, t))).isNull()
     }
+
+    @Test
+    fun `NEFT credited-to-beneficiary delivery ack is confirmation-only ignored`() {
+        assertThat(parser.isTransactional(SampleSms.AXIS_NEFT_CREDITED_TO_BENEFICIARY)).isFalse()
+        assertThat(
+            parser.parse(RawSms("VM-AXISBK", SampleSms.AXIS_NEFT_CREDITED_TO_BENEFICIARY, t)),
+        ).isNull()
+    }
 }
