@@ -292,5 +292,9 @@ Not You? SMS BLOCKALL CustID to 919951860002
      */
     const val ICICI_CARD_AVENUE_SUPERMAR_EMI_OFFER =
         "Rs 8,646.47 spent on ICICI Bank Card XX1014 on 26-Jul-26 at Avenue Supermar. Avl Lmt: Rs 2,06,758.37. To dispute, call 18002662/SMS BLOCK 1014 to 9215676766. To convert this txn to EMI give a missed call on 9924667667. Know more about EMI conversion at https://icici.co/ICICIT/iIPGGt"
+
+    /** ICICI UPI to Apollo — Medical spend, not Transfer ("; NAME credited" template). */
+    const val ICICI_UPI_APOLLO_PHARMACY =
+        "ICICI Bank Acct XX293 debited for Rs 600.07 on 25-Jul-26; Apollo Pharmacy credited. UPI:657221332249. Call 18002662 for dispute. SMS BLOCK 293 to 9215676766."
 }
 

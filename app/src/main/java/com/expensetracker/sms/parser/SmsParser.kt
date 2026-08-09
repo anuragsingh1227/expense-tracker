@@ -329,13 +329,16 @@ class SmsParser(
         ) {
             return true
         }
-        // IMPS/NEFT/UPI self-move templates: "Acct A debited ... NAME credited".
-        // Skip when the payee looks like an MF/broker — those are Investment, not Transfer.
+        // IMPS/NEFT/UPI templates: "Acct A debited …; NAME credited".
+        // Self-moves / person P2A → Transfer. Known merchants (Apollo, Swiggy, …)
+        // and MF/broker payees must NOT be forced to Transfer.
         if (upper.contains("DEBITED") && upper.contains("CREDITED") &&
             (upper.contains("IMPS") || upper.contains("NEFT") || upper.contains("RTGS") ||
                 upper.contains("UPI"))
         ) {
-            if (!looksLikeInvestmentPayee(upper)) return true
+            if (!looksLikeInvestmentPayee(upper) && !looksLikeKnownSpendMerchantPayee(upper)) {
+                return true
+            }
         }
         if (Regex("""ACCT\s+XX\d+\s+DEBITED.*ACCT\s+XX\d+\s+CREDITED""").containsMatchIn(upper)) {
             return true
@@ -364,6 +367,19 @@ class SmsParser(
             return true
         }
         return MerchantDictionary.match(upper)?.category == Categories.INVESTMENT
+    }
+
+    /**
+     * "; Apollo Pharmacy credited" / known merchant UPI payee — real spend, not Transfer.
+     */
+    private fun looksLikeKnownSpendMerchantPayee(upper: String): Boolean {
+        val payee = ICICI_PAYEE_CREDITED.find(upper)?.groupValues?.getOrNull(1)
+        if (!payee.isNullOrBlank()) {
+            val match = MerchantDictionary.match(payee)
+            if (match != null && match.category != Categories.TRANSFER) return true
+        }
+        val bodyMatch = MerchantDictionary.match(upper)
+        return bodyMatch != null && bodyMatch.category != Categories.TRANSFER
     }
 
     private fun extractReference(body: String): String? {
