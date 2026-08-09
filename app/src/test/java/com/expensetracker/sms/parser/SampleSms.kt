@@ -286,5 +286,11 @@ Not You? SMS BLOCKALL CustID to 919951860002
      */
     const val AXIS_NEFT_CREDITED_TO_BENEFICIARY =
         "Your NEFT txn with Ref. No. AXOMB22002006227 for INR 10000.00 is credited to beneficiary Manju Singh, A/c no. XX5116 on 08-08-26 at 11:52:35 IST - Axis Bank"
+
+    /**
+     * Real card grocery spend. Footer advertises EMI conversion — must NOT book as EMI.
+     */
+    const val ICICI_CARD_AVENUE_SUPERMAR_EMI_OFFER =
+        "Rs 8,646.47 spent on ICICI Bank Card XX1014 on 26-Jul-26 at Avenue Supermar. Avl Lmt: Rs 2,06,758.37. To dispute, call 18002662/SMS BLOCK 1014 to 9215676766. To convert this txn to EMI give a missed call on 9924667667. Know more about EMI conversion at https://icici.co/ICICIT/iIPGGt"
 }
 

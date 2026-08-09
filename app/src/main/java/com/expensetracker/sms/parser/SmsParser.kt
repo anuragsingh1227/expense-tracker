@@ -244,7 +244,7 @@ class SmsParser(
             type == TransactionType.CREDIT && (upper.contains("SALARY") || upper.contains("SAL CR")) -> Categories.SALARY
             isSelfOrCardTransfer(upper) -> Categories.TRANSFER
             upper.contains("ATM") || upper.contains("CASH WDL") -> Categories.CASH_WITHDRAWAL
-            upper.contains("EMI") || isAchLoanEmi(upper) -> Categories.EMI
+            isAchLoanEmi(upper) || looksLikeRealEmiDebit(upper) -> Categories.EMI
             upper.contains("RENT") -> Categories.RENT
             upper.contains("INSURANCE") || upper.contains("INS PREMIUM") || upper.contains("PREMIUM PAID") ->
                 Categories.INSURANCE
@@ -291,6 +291,19 @@ class SmsParser(
         if (upper.contains("WEALTH") || upper.contains("MUTUAL") || upper.contains("INVEST")) return false
         if (upper.contains("RACPC")) return true
         return LOAN_EMI_COLLECTOR_HINTS.any { upper.contains(it) }
+    }
+
+    /**
+     * True EMI debit wording — not card-spend footers that advertise
+     * "convert this txn to EMI" / "EMI conversion" marketing links.
+     */
+    private fun looksLikeRealEmiDebit(upper: String): Boolean {
+        val scrubbed = EMI_CONVERSION_OFFER_CLAUSES.fold(upper) { acc, pattern ->
+            pattern.replace(acc, " ")
+        }
+        if (!Regex("""\bEMI\b""").containsMatchIn(scrubbed)) return false
+        // Remaining EMI after stripping conversion offers = real EMI collect / EMI payment.
+        return true
     }
 
     /**
@@ -456,6 +469,16 @@ class SmsParser(
          */
         private val ATD_AUTO_DEBIT = Regex("""ATD\s*\*?\s*AUTO\s*DEBI""", RegexOption.IGNORE_CASE)
         private val BIL_NEFT = Regex("""BIL\s*\*?\s*NEFT""", RegexOption.IGNORE_CASE)
+        /** ICICI/HDFC card-alert footers offering EMI conversion — not an EMI debit. */
+        private val EMI_CONVERSION_OFFER_CLAUSES = listOf(
+            Regex("""(?i)to\s+convert\s+this\s+(?:txn|transaction)\s+to\s+emi\b[^.]*\.?"""),
+            Regex("""(?i)convert\s+this\s+(?:txn|transaction)\s+to\s+emi\b[^.]*\.?"""),
+            Regex("""(?i)know\s+more\s+about\s+emi\s+conversion\b[^.]*\.?"""),
+            Regex("""(?i)emi\s+conversion\s+at\s+\S+"""),
+            Regex("""(?i)give\s+a\s+missed\s+call\s+on\s+\d+\b[^.]*\.?"""),
+            Regex("""(?i)(?:opt|apply)\s+for\s+emi\b[^.]*\.?"""),
+            Regex("""(?i)no\s+cost\s+emi\b[^.]*\.?"""),
+        )
         // Axis compact UPI: "UPI/P2A/111991242206/LALAWMPUII"
         private val UPI_PATH_PAYEE =
             Regex("""(?i)\bUPI/(?:P2A|P2M|P2P)/[0-9]{6,}/([A-Z][A-Z0-9 .&'*_-]{1,40})""")
