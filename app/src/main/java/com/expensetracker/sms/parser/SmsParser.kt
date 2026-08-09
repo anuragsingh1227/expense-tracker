@@ -139,6 +139,11 @@ class SmsParser(
             val name = match.groupValues[1].trim().trimEnd('.', ',')
             if (name.length >= 2 && isPlausibleMerchant(name)) return name
         }
+        // Axis compact: "UPI/P2A/<ref>/<PAYEE>" or "UPI/P2M/<ref>/<MERCHANT>"
+        UPI_PATH_PAYEE.find(body)?.let { match ->
+            val name = match.groupValues[1].trim().trimEnd('.', ',', '/')
+            if (name.length >= 2 && isPlausibleMerchant(name)) return name
+        }
         return null
     }
 
@@ -356,11 +361,16 @@ class SmsParser(
          * (no word boundary before ATD — it's glued directly onto "Info" in the SMS).
          */
         private val ATD_AUTO_DEBIT = Regex("""ATD\s*\*?\s*AUTO\s*DEBI""", RegexOption.IGNORE_CASE)
+        // Axis compact UPI: "UPI/P2A/111991242206/LALAWMPUII"
+        private val UPI_PATH_PAYEE =
+            Regex("""(?i)\bUPI/(?:P2A|P2M|P2P)/[0-9]{6,}/([A-Z][A-Z0-9 .&'*_-]{1,40})""")
         private val REFERENCE_PATTERNS = listOf(
             Regex("""(?i)(?:ref(?:erence)?(?:\s*no)?\.?|txn(?:\s*id)?\.?|utr)[:\s#]*([A-Z0-9]{6,})"""),
             Regex("""(?i)UPI(?:\s*ref)?[:\s]*([0-9]{9,})"""),
-            // Axis NEFT/IMPS compact template: "NEFT/MB/AXOMB16602145999/V"
-            Regex("""(?i)(?:NEFT|IMPS|RTGS)/[A-Z]{1,3}/([A-Z0-9]{8,})"""),
+            // Axis/ICICI compact UPI path: "UPI/P2A/111991242206/LALAWMPUII"
+            Regex("""(?i)UPI/[A-Z0-9]+/([0-9]{9,})"""),
+            // Axis NEFT/IMPS compact template: "NEFT/MB/AXOMB16602145999/V" or "IMPS/P2A/…"
+            Regex("""(?i)(?:NEFT|IMPS|RTGS)/[A-Z0-9]{1,3}/([A-Z0-9]{8,})"""),
             // Axis card-payment compact template: "CRD-PMNT-530562****0887"
             Regex("""(?i)CRD[- ]?PMNT[- ]?([A-Z0-9*]{6,})"""),
         )

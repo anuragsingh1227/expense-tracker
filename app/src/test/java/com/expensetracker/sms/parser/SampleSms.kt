@@ -81,6 +81,19 @@ object SampleSms {
     const val SBI_CARD_PAYMENT_RECEIVED_AGAINST =
         "SBI Card: Payment of INR 10,000 received against your Credit Card XX1234 on 2026-08-12."
 
+    /**
+     * Axis compact UPI debit with amount *before* the verb ("INR X debited").
+     * Must stay in the ledger (was dropped by the gate previously).
+     */
+    const val AXIS_INR_DEBITED_UPI_P2A = """
+INR 2500.00 debited
+A/c no. XX8291
+08-08-26, 14:46:26
+UPI/P2A/111991242206/LALAWMPUII
+Not you? SMS BLOCKUPI Cust ID to 919951860002
+Axis Bank
+""".trimIndent()
+
     /** Public DLT-style spend alert (SMS Gateway Center sample shape). */
     const val CARD_SPENT_JIO =
         "Alert: You've spent INR 555.00 on your bank card **9123 at BD JIO MONEY on 05/08/2026 at 11:07 IST."

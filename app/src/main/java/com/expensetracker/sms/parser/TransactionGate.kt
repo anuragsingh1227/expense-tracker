@@ -169,6 +169,18 @@ object TransactionGate {
         // no with/for/from/via connector.
         "DEBITED RS", "DEBITED INR", "DEBITED ₹",
     )
+
+    /**
+     * Axis (and some other banks) put the currency *before* the verb:
+     * "INR 2500.00 debited\nA/c no. XX8291\n…\nUPI/P2A/…".
+     * That fails the "DEBITED INR" / "DEBITED FROM" substring checks above.
+     */
+    private val AMOUNT_THEN_DEBITED = Regex(
+        """(?i)(?:rs\.?|inr|₹)\s*[0-9,]+\.?\d*\s+debited\b""",
+    )
+    private val AMOUNT_THEN_CREDITED = Regex(
+        """(?i)(?:rs\.?|inr|₹)\s*[0-9,]+\.?\d*\s+credited\b""",
+    )
     private val STRONG_CREDIT = listOf(
         "HAS BEEN CREDITED", "BEEN CREDITED", "CREDITED WITH", "CREDITED TO", "CREDITED",
         // "RECEIVED FROM" is OK here: third-party "received *payment* from …" acks are
@@ -194,8 +206,10 @@ object TransactionGate {
         // PPF/NPS/SIP "contribution received / thank you" acks without an SI/debit posting.
         if (isInvestmentContributionAck(upper)) return false
         if (!SmsAmountExtractor.AMOUNT_PATTERN.containsMatchIn(trimmed)) return false
-        val debit = STRONG_DEBIT.any { upper.contains(it) }
-        val credit = STRONG_CREDIT.any { upper.contains(it) }
+        val debit = STRONG_DEBIT.any { upper.contains(it) } ||
+            AMOUNT_THEN_DEBITED.containsMatchIn(trimmed)
+        val credit = STRONG_CREDIT.any { upper.contains(it) } ||
+            AMOUNT_THEN_CREDITED.containsMatchIn(trimmed)
         return debit || credit
     }
 
