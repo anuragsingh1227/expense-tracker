@@ -21,6 +21,8 @@ package com.expensetracker.domain.insights
  *    bill or an explicit self-transfer is [com.expensetracker.sms.parser.Categories.TRANSFER].
  *    Real PPF SI / "credited in PPF" postings are Investment (not spend).
  *    Refunds/reversals offset spend via [LedgerBuckets], never inflate income.
+ *    When both legs of an own-account move share a UPI/NEFT/IMPS reference,
+ *    [SelfTransferLinker] removes the pair from Activity (zero net worth change).
  *
  * 4. **Idempotent ingest.** Duplicate SMS share a dedupe hash; retries must not
  *    create a second economic effect ([com.expensetracker.sms.parser.SmsParser]).

@@ -243,4 +243,17 @@ Rs 1,299.00 spent on AXIS Bank Credit Card ending 4321 at FLIPKART on 05-Aug-26
 
 Get up to Rs 500 cashback on UPI spends this weekend. Shop now.
 """
+
+    /** ICICI→Axis own-account UPI self-transfer debit — pairs with [OWN_ACCOUNT_UPI_CREDIT_100000]. */
+    const val OWN_ACCOUNT_UPI_DEBIT_100000 =
+        "ICICI Bank Acct XX293 debited for Rs 100000.00 on 01-Aug-26; ANURAG SINGH credited. UPI:781919319954. Call 18002662 for dispute. SMS BLOCK 293 to 9215676766."
+
+    /** Matching Axis credit leg for the same UPI self-transfer. */
+    val OWN_ACCOUNT_UPI_CREDIT_100000 = """
+INR 100000.00 credited
+A/c no. XX8291
+01-08-26, 07:48:42 IST
+UPI/P2A/781919319954/ANURAG SI/ICIC/Paym - Axis Bank
+""".trimIndent()
 }
+

@@ -28,6 +28,20 @@ object SmsDateExtractor {
         """(?i)\b(?:on|dated)\s+([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{2,4})(?:\s+(?:at\s+)?(\d{1,2}):(\d{2})(?::(\d{2}))?)?""",
     )
 
+    /**
+     * Axis/ICICI compact multi-line templates put the stamp on its own line:
+     * `01-08-26, 07:48:42 IST` / `15-06-26 20:45:10` / `08-08-26, 14:46:26`
+     * (no leading "on"/"dated").
+     */
+    private val COMPACT_LINE = Regex(
+        """(?im)^(?:\s*)(\d{1,2})[./\-](\d{1,2})[./\-](\d{2,4})(?:,)?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(?:IST|UTC))?""",
+    )
+
+    /** Date-only compact line: `01-08-26` */
+    private val COMPACT_DATE_ONLY = Regex(
+        """(?im)^(?:\s*)(\d{1,2})[./\-](\d{1,2})[./\-](\d{2,4})\s*$""",
+    )
+
     fun extract(body: String, zone: ZoneId, fallback: Instant): Instant {
         val fallbackYear = LocalDate.ofInstant(fallback, zone).year
         return extractOrNull(body, zone, fallbackYear) ?: fallback
@@ -55,6 +69,19 @@ object SmsDateExtractor {
             val year = if (yearToken.isBlank()) fallbackYear else normalizeYear(yearToken.toInt())
             val time = parseTime(m.groupValues.getOrNull(4), m.groupValues.getOrNull(5), m.groupValues.getOrNull(6))
             toInstant(year, month, day, time, zone)?.let { return it }
+        }
+        COMPACT_LINE.find(body)?.let { m ->
+            val day = m.groupValues[1].toInt()
+            val month = m.groupValues[2].toInt()
+            val year = normalizeYear(m.groupValues[3].toInt())
+            val time = parseTime(m.groupValues[4], m.groupValues[5], m.groupValues.getOrNull(6))
+            toInstant(year, month, day, time, zone)?.let { return it }
+        }
+        COMPACT_DATE_ONLY.find(body)?.let { m ->
+            val day = m.groupValues[1].toInt()
+            val month = m.groupValues[2].toInt()
+            val year = normalizeYear(m.groupValues[3].toInt())
+            toInstant(year, month, day, LocalTime.NOON, zone)?.let { return it }
         }
         return null
     }
