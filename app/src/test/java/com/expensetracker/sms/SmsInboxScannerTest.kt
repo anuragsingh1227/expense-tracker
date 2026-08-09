@@ -93,6 +93,32 @@ class SmsInboxScannerTest {
     }
 
     @Test
+    fun `scan skips confirmation-only PPF and card payment acks but keeps spend`() = runTest {
+        val messages = listOf(
+            RawSms("VM-HDFCBK", SampleSms.HDFC_ZOMATO_CARD_SPEND, now.minusSeconds(300)),
+            RawSms("VM-ICICIB", SampleSms.PPF_CONTRIBUTION_RECEIVED_ACK, now.minusSeconds(200)),
+            RawSms("VM-SBICRD", SampleSms.SBI_CARD_PAYMENT_RECEIVED_AGAINST, now.minusSeconds(100)),
+            RawSms("VM-IDBIBK", SampleSms.IDBI_PPF_SI_CREDIT, now.minusSeconds(50)),
+        )
+        val repo = FakeTransactionRepository()
+        val result = SmsInboxScanner(
+            RecordingSource(messages),
+            SmsParser(),
+            repo,
+            FakeSettingsDao(),
+            clock,
+        ).scan()
+
+        assertThat(result.examined).isEqualTo(4)
+        assertThat(result.inserted).isEqualTo(2) // Zomato spend + PPF SI
+        assertThat(result.skipped).isEqualTo(2)
+        assertThat(repo.stored.map { it.category }).containsExactly(
+            com.expensetracker.sms.parser.Categories.FOOD,
+            com.expensetracker.sms.parser.Categories.INVESTMENT,
+        )
+    }
+
+    @Test
     fun `permission denied does not mark backfill done or advance watermark`() = runTest {
         val settings = FakeSettingsDao()
         val result = SmsInboxScanner(

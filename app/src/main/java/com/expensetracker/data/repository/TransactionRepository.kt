@@ -134,11 +134,27 @@ class TransactionRepositoryImpl @Inject constructor(
 
     override suspend fun purgeNonTransactional(parser: SmsParser): Int {
         val spamIds = dao.getIdAndRawSms()
-            .filter { row -> row.rawSms.isNullOrBlank() || !parser.isTransactional(row.rawSms) }
+            .filter { row -> shouldPurgeImportedSms(row.rawSms, row.manuallyEdited, parser) }
             .map { it.id }
         if (spamIds.isEmpty()) return 0
         spamIds.chunked(200).forEach { dao.deleteByIds(it) }
         return spamIds.size
+    }
+
+    companion object {
+        /**
+         * Clean-spam must only remove imported SMS that the gate no longer accepts.
+         * Manual rows (blank rawSms) and user-edited rows are never purged.
+         */
+        fun shouldPurgeImportedSms(
+            rawSms: String?,
+            manuallyEdited: Boolean,
+            parser: SmsParser,
+        ): Boolean {
+            if (manuallyEdited) return false
+            if (rawSms.isNullOrBlank()) return false
+            return !parser.isTransactional(rawSms)
+        }
     }
 
     override suspend fun reconcileSelfTransfers(ownerNames: List<String>?): Int {

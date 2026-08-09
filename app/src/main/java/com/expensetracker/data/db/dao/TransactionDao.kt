@@ -156,7 +156,7 @@ interface TransactionDao {
     )
     fun search(query: String?): Flow<List<TransactionEntity>>
 
-    @Query("SELECT id, rawSms FROM transactions")
+    @Query("SELECT id, rawSms, manuallyEdited FROM transactions")
     suspend fun getIdAndRawSms(): List<IdRawSms>
 
     @Query("DELETE FROM transactions WHERE id IN (:ids)")
@@ -171,4 +171,8 @@ data class CategoryMonthTotal(
     val total: Double,
 )
 
-data class IdRawSms(val id: Long, val rawSms: String?)
+data class IdRawSms(
+    val id: Long,
+    val rawSms: String?,
+    val manuallyEdited: Boolean = false,
+)

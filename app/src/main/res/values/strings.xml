@@ -183,7 +183,7 @@
     <string name="backup_exported">Backup saved. Choose Google Drive in the picker next time to keep it in the cloud.</string>
     <string name="backup_imported">Restored %1$d new · skipped %2$d duplicates · %3$d merchant rules · %4$d label rules</string>
     <string name="settings_cleanup_title">Clean spam</string>
-    <string name="settings_cleanup_body">Removes imported rows that look like offers, OTPs, due reminders, card/merchant payment acknowledgements, or other non-transactions (using the updated filters).</string>
+    <string name="settings_cleanup_body">Removes imported SMS that look like offers, OTPs, due reminders, card/merchant/investment payment acknowledgements, or other non-transactions. Manual entries you added are kept.</string>
     <string name="cleanup_spam">Remove spam entries</string>
     <string name="cleanup_result">Removed %1$d spam-like entries</string>
     <string name="add_transaction_title">Add transaction</string>

@@ -166,7 +166,7 @@ class BackupRepositoryTest {
         override fun searchBetween(query: String?, from: Instant, to: Instant): Flow<List<TransactionEntity>> =
             flowOf(rows.filter { !it.timestamp.isBefore(from) && it.timestamp.isBefore(to) })
         override suspend fun getIdAndRawSms() = rows.map {
-            com.expensetracker.data.db.dao.IdRawSms(it.id, it.rawSms)
+            com.expensetracker.data.db.dao.IdRawSms(it.id, it.rawSms, it.manuallyEdited)
         }
         override suspend fun deleteByIds(ids: List<Long>) {
             rows.removeAll { it.id in ids }
