@@ -686,5 +686,67 @@ object InternetSmsCorpus {
             body = "Your SBI Card payment of Rs 11,200.00 will be auto-debited from your registered bank account on due date.",
             expect = Expect(false, notes = "Future auto-debit reminder is ignored."),
         ),
+
+        // --- Extra public-template keep cases (SBI / cheque / cash / wallets) ---
+        Case(
+            id = "keep-sbi-transferred-upi-111",
+            sender = "VM-SBIINB",
+            body = "Rs.450.00 transferred from A/c XX1234 on 15-APR via UPI to BIGBASKET Ref 412839. Avl Bal Rs 8,200.00",
+            expect = Expect(true, TransactionType.DEBIT, Categories.GROCERIES, "450.00", "BigBasket", true, "SBI uses transferred-from wording for UPI spends."),
+        ),
+        Case(
+            id = "keep-cheque-cleared-credit-112",
+            sender = "VM-HDFCBK",
+            body = "Cheque No. 123456 for Rs.50,000.00 has been cleared in your A/c XX1234 on 06-08-26. Avl Bal Rs 1,20,000.00",
+            expect = Expect(true, TransactionType.CREDIT, Categories.TRANSFER, "50000.00", null, false, "Cheque clear is a credit movement on the account."),
+        ),
+        Case(
+            id = "keep-cash-deposit-113",
+            sender = "VM-AXISBK",
+            body = "Cash deposit of INR 10,000.00 in A/c XX8291 on 02-08-26. Avl Bal INR 30,000.00",
+            expect = Expect(true, TransactionType.CREDIT, Categories.TRANSFER, "10000.00", null, false, "Cash deposit is a real credit; not income by default."),
+        ),
+        Case(
+            id = "keep-gpay-paid-to-vpa-114",
+            sender = "VM-HDFCBK",
+            body = "Rs.299.00 paid to merchant@okicici via UPI. Avbl bal Rs.5000",
+            expect = Expect(true, TransactionType.DEBIT, Categories.OTHERS, "299.00", null, true, "GPay-style paid-to VPA debit without named merchant."),
+        ),
+        Case(
+            id = "keep-paytm-you-have-paid-115",
+            sender = "VM-PAYTMB",
+            body = "You have paid Rs 75.50 to store123@paytm on 04-Nov-25",
+            expect = Expect(true, TransactionType.DEBIT, Categories.OTHERS, "75.50", null, true, "Paytm wallet/UPI paid wording."),
+        ),
+        Case(
+            id = "keep-vpa-linked-amazon-116",
+            sender = "VM-INDBNK",
+            body = "Your VPA 9876543210@ybl linked to Indian Bank a/c no. XXXXXX1234 is debited for Rs.499.00 and credited to amazon@apl (UPI Ref no 105201221633).",
+            expect = Expect(true, TransactionType.DEBIT, Categories.SHOPPING, "499.00", "Amazon", true, "VPA-linked bank debit to amazon@apl."),
+        ),
+        Case(
+            id = "keep-interest-credit-117",
+            sender = "VM-SBIINB",
+            body = "Your A/c XX9876 credited with interest Rs 245.50 on 01-Jul-26. Avl Bal Rs 50,245.50",
+            expect = Expect(true, TransactionType.CREDIT, Categories.TRANSFER, "245.50", null, false, "Interest credit is money in; Transfer/Other income policy TBD."),
+        ),
+        Case(
+            id = "ignore-upi-collect-request-118",
+            sender = "VM-AXISBK",
+            body = "UPI collect request of Rs 500.00 from merchant@okaxis. Approve in your UPI app.",
+            expect = Expect(false, notes = "Collect request is not a completed debit."),
+        ),
+        Case(
+            id = "ignore-emi-converted-ack-119",
+            sender = "AX-ICICIB",
+            body = "Your transaction of Rs 8,646.47 at Avenue Supermar on Card XX1014 has been converted to EMI. EMI of Rs 864 starts from 05-Aug-26.",
+            expect = Expect(false, notes = "EMI conversion ack duplicates original card spend; do not re-book."),
+        ),
+        Case(
+            id = "keep-phonepe-upi-120",
+            sender = "VM-PHONPE",
+            body = "Rs 150.00 debited from account ending 1234 to 9876543210@ybl on 04-11-25. UPI Ref: 432198765",
+            expect = Expect(true, TransactionType.DEBIT, Categories.OTHERS, "150.00", null, true, "PhonePe UPI debit to VPA."),
+        ),
     )
 }
