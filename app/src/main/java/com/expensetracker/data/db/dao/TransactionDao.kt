@@ -106,10 +106,16 @@ interface TransactionDao {
 
     @Query(
         """
-        SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) FROM transactions
-        WHERE type = 'DEBIT'
-          AND timestamp >= :from AND timestamp < :to
-          AND category = 'Investment'
+        SELECT COALESCE(SUM(
+            CASE
+                WHEN type = 'DEBIT' AND category = 'Investment'
+                    THEN CAST(amount AS REAL)
+                WHEN type = 'CREDIT' AND category = 'Investment'
+                    THEN -CAST(amount AS REAL)
+                ELSE 0
+            END
+        ), 0) FROM transactions
+        WHERE timestamp >= :from AND timestamp < :to
         """,
     )
     fun observeInvestmentTotal(from: Instant, to: Instant): Flow<Double>

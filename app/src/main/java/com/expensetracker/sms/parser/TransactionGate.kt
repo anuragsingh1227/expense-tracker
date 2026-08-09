@@ -129,6 +129,24 @@ object TransactionGate {
             """\bRECEIVED\s+IN\s+YOUR\s+(?:PPF|NPS|PUBLIC\s+PROVIDENT)\b""",
             RegexOption.IGNORE_CASE,
         ),
+        // Broker/app "refund has been initiated… may take N working days" — not a bank
+        // movement. The savings/current credit SMS is the single ledger fact to keep.
+        Regex(
+            """\bREFUND\b.{0,80}\b(?:HAS\s+BEEN\s+|WAS\s+|IS\s+)?INITIATED\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\b(?:HAS\s+BEEN\s+|WAS\s+|IS\s+)?INITIATED\b.{0,80}\bREFUND\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bMAY\s+TAKE\s+\d+\s*[-–]\s*\d+\s+WORKING\s+DAYS\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bREFUND\b.{0,60}\bAGAINST\s+YOUR\s+INVESTMENT\b""",
+            RegexOption.IGNORE_CASE,
+        ),
     )
 
     private val PAYMENT_TOWARDS_CARD = Regex(

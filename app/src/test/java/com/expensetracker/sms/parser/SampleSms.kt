@@ -255,5 +255,19 @@ A/c no. XX8291
 01-08-26, 07:48:42 IST
 UPI/P2A/781919319954/ANURAG SI/ICIC/Paym - Axis Bank
 """.trimIndent()
+
+    /** Motilal Oswal MF UPI debit — Investment (not Transfer), may later be refunded. */
+    const val MOTILAL_OSWAL_MF_UPI_DEBIT_40000 =
+        "ICICI Bank Acct XX293 debited for Rs 40000.00 on 03-Aug-26; MotilalOswalMF credited. UPI:479986606620. Call 18002662 for dispute. SMS BLOCK 293 to 9215676766."
+
+    /**
+     * Broker/app refund-initiated ack — confirmation only; bank credit SMS is the ledger fact.
+     */
+    const val ETMONEY_REFUND_INITIATED_40000 =
+        "Dear ANURAG SINGH, refund of Rs. 40,000 against your Investment in Balanced+ Portfolio (Order Number 101-0240413-0013485) has been initiated. It may take 5-7 working days for same to get processed. - ETMONEY"
+
+    /** Anonymous IMPS credit returning investment capital (pairs with Motilal debit). */
+    const val ICICI_IMPS_MOBILE_CREDIT_40000 =
+        "ICICI Bank Account XX293 is credited with Rs 40,000.00 on 01-Aug-26 by Account linked to mobile number XXXXX00000. IMPS Ref. no. 621321435842."
 }
 

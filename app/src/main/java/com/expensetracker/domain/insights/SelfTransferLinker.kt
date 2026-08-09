@@ -137,6 +137,6 @@ object SelfTransferLinker {
         Regex("""(?i)UPI(?:\s*ref)?[:\s]*([0-9]{9,})"""),
         Regex("""(?i)UPI/[A-Z0-9]+/([0-9]{9,})"""),
         Regex("""(?i)(?:NEFT|IMPS|RTGS)/[A-Z0-9]{1,3}/([A-Z0-9]{8,})"""),
-        Regex("""(?i)(?:ref(?:erence)?(?:\s*no)?\.?|txn(?:\s*id)?\.?|utr)[:\s#]*([A-Z0-9]{6,})"""),
+        Regex("""(?i)(?:ref(?:erence)?\.?(?:\s*no\.?)?|txn(?:\s*id)?\.?|utr)[:\s#]*([A-Z0-9]{6,})"""),
     )
 }

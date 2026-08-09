@@ -141,6 +141,11 @@ class SmsParser(
             val name = sanitizeMerchantCandidate(match.groupValues[1]) ?: return@let
             if (isPlausibleMerchant(name)) return name
         }
+        // ICICI UPI payee: "Acct XX293 debited …; MotilalOswalMF credited. UPI:…"
+        ICICI_PAYEE_CREDITED.find(body)?.let { match ->
+            val name = sanitizeMerchantCandidate(match.groupValues[1]) ?: return@let
+            if (isPlausibleMerchant(name)) return name
+        }
         // "for UPI/123456-SWIGGY" or "for UPI/SWIGGY" — the name after the slash/dash.
         UPI_MERCHANT.find(body)?.let { match ->
             val name = match.groupValues[1].trim().trimEnd('.', ',')
@@ -179,6 +184,9 @@ class SmsParser(
         if (upper.startsWith("RS") || upper.startsWith("INR") || name.startsWith("₹")) return false
         if (DISPUTE_OR_HELPLINE.containsMatchIn(name)) return false
         if (PHONE_HEAVY_MERCHANT.containsMatchIn(name)) return false
+        // IMPS "by Account linked to mobile number XXXXX00000" — not a merchant.
+        if (upper.contains("MOBILE NUMBER") || upper.contains("LINKED TO MOBILE")) return false
+        if (Regex("""(?i)\bX{3,}\d{2,}\b""").containsMatchIn(name)) return false
         return true
     }
 
@@ -274,12 +282,13 @@ class SmsParser(
         ) {
             return true
         }
-        // IMPS/NEFT/UPI self-move templates: "Acct A debited ... NAME credited"
+        // IMPS/NEFT/UPI self-move templates: "Acct A debited ... NAME credited".
+        // Skip when the payee looks like an MF/broker — those are Investment, not Transfer.
         if (upper.contains("DEBITED") && upper.contains("CREDITED") &&
             (upper.contains("IMPS") || upper.contains("NEFT") || upper.contains("RTGS") ||
                 upper.contains("UPI"))
         ) {
-            return true
+            if (!looksLikeInvestmentPayee(upper)) return true
         }
         if (Regex("""ACCT\s+XX\d+\s+DEBITED.*ACCT\s+XX\d+\s+CREDITED""").containsMatchIn(upper)) {
             return true
@@ -295,6 +304,19 @@ class SmsParser(
             return true
         }
         return false
+    }
+
+    /** MF/broker payee on a "X credited" UPI/IMPS debit — book as Investment, not Transfer. */
+    private fun looksLikeInvestmentPayee(upper: String): Boolean {
+        if (INVESTMENT_PAYEE_HINTS.any { upper.contains(it) }) return true
+        // "; MotilalOswalMF credited" / "GROWW credited" — dictionary keyword before credited.
+        val payee = ICICI_PAYEE_CREDITED.find(upper)?.groupValues?.getOrNull(1)
+        if (!payee.isNullOrBlank() &&
+            MerchantDictionary.match(payee)?.category == Categories.INVESTMENT
+        ) {
+            return true
+        }
+        return MerchantDictionary.match(upper)?.category == Categories.INVESTMENT
     }
 
     private fun extractReference(body: String): String? {
@@ -379,8 +401,22 @@ class SmsParser(
         // Axis compact UPI: "UPI/P2A/111991242206/LALAWMPUII"
         private val UPI_PATH_PAYEE =
             Regex("""(?i)\bUPI/(?:P2A|P2M|P2P)/[0-9]{6,}/([A-Z][A-Z0-9 .&'*_-]{1,40})""")
+        // ICICI: "…; MotilalOswalMF credited. UPI:…" / "… & Acct XX791 credited"
+        private val ICICI_PAYEE_CREDITED =
+            Regex(
+                """(?i)(?:;|&)\s*([A-Z][A-Z0-9 .&'*_-]{1,40}?)\s+credited\b""",
+            )
+        private val INVESTMENT_PAYEE_HINTS = listOf(
+            "MUTUAL FUND", " MOTILAL", "MOTILALOSWAL", "GROWW", "ZERODHA", "UPSTOX",
+            "ETMONEY", "ET MONEY", "SCRIPBOX", "FISDOM", "INDMONEY", "KUVERA",
+            "SMALLCASE", "PAYTM MONEY", "ANGELONE", "ANGEL ONE", "MOAMC",
+            "WEALTHMANAGE", "FUNDSINDIA",
+            // Compact UPI payee tokens often end with MF (MotilalOswalMF, AxisMF, …).
+            "MF CREDITED",
+        )
         private val REFERENCE_PATTERNS = listOf(
-            Regex("""(?i)(?:ref(?:erence)?(?:\s*no)?\.?|txn(?:\s*id)?\.?|utr)[:\s#]*([A-Z0-9]{6,})"""),
+            // "IMPS Ref. no. 621321435842" / "Ref no. ABC" / "UPI Ref 123"
+            Regex("""(?i)(?:ref(?:erence)?\.?(?:\s*no\.?)?|txn(?:\s*id)?\.?|utr)[:\s#]*([A-Z0-9]{6,})"""),
             Regex("""(?i)UMRN[:\s]*([A-Z0-9]{6,})"""),
             Regex("""(?i)UPI(?:\s*ref)?[:\s]*([0-9]{9,})"""),
             // Axis/ICICI compact UPI path: "UPI/P2A/111991242206/LALAWMPUII"
