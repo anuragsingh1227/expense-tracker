@@ -66,7 +66,8 @@ object SelfTransferLinker {
             pairs += PairMatch(debit = debit, credit = match)
         }
 
-        // Pass 2: Transfer-category + owner-name heuristic (no shared ref).
+        // Pass 2: Transfer-category + owner-name heuristic when refs don't already
+        // pair (e.g. Axis IMPS/P2A/…/Anur debit vs IDBI credit with no shared UTR).
         val transferDebits = allDebits.filter {
             it.id !in usedDebitIds && it.category == Categories.TRANSFER
         }
@@ -74,7 +75,7 @@ object SelfTransferLinker {
             it.id !in usedCreditIds && it.category == Categories.TRANSFER
         }
         for (debit in transferDebits) {
-            if (effectiveReference(debit) != null) continue
+            if (debit.id in usedDebitIds) continue
             val match = transferCredits
                 .filter { credit ->
                     credit.id !in usedCreditIds &&
@@ -85,6 +86,7 @@ object SelfTransferLinker {
                 }
                 .minByOrNull { Duration.between(debit.timestamp, it.timestamp).abs() }
                 ?: continue
+            usedDebitIds += debit.id
             usedCreditIds += match.id
             pairs += PairMatch(debit = debit, credit = match)
         }

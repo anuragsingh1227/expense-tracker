@@ -49,10 +49,13 @@ object MerchantDictionary {
 
         // Investments / brokers / MF / wealth
         Entry("SCRIPBOXWEALTHMANAGE", "Scripbox", Categories.INVESTMENT),
+        Entry("SCRIPBOXWEALTHMANAG", "Scripbox", Categories.INVESTMENT),
         Entry("SCRIPBOX WEALTH", "Scripbox", Categories.INVESTMENT),
         Entry("SCRIPBOX", "Scripbox", Categories.INVESTMENT),
         Entry("WEALTHMANAGE", "Wealth Manager", Categories.INVESTMENT),
         Entry("WEALTH MANAGE", "Wealth Manager", Categories.INVESTMENT),
+        Entry("GROWW PAY SERVICES", "Groww", Categories.INVESTMENT),
+        Entry("GROWW PAY", "Groww", Categories.INVESTMENT),
         Entry("GROWW", "Groww", Categories.INVESTMENT),
         Entry("ZERODHA", "Zerodha", Categories.INVESTMENT),
         Entry("UPSTOX", "Upstox", Categories.INVESTMENT),

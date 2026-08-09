@@ -42,6 +42,14 @@ object SmsDateExtractor {
         """(?im)^(?:\s*)(\d{1,2})[./\-](\d{1,2})[./\-](\d{2,4})\s*$""",
     )
 
+    /**
+     * IDBI-style: `as of 05 AUG 06:44 hrs` / `as of 05 Aug 2026`.
+     * Year must be 4 digits when present — otherwise `06:44` is mistaken for year 2006.
+     */
+    private val AS_OF_MON = Regex(
+        """(?i)\bas\s+of\s+(\d{1,2})\s+([A-Za-z]{3,9})(?:\s+(\d{4}))?(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?""",
+    )
+
     fun extract(body: String, zone: ZoneId, fallback: Instant): Instant {
         val fallbackYear = LocalDate.ofInstant(fallback, zone).year
         return extractOrNull(body, zone, fallbackYear) ?: fallback
@@ -82,6 +90,14 @@ object SmsDateExtractor {
             val month = m.groupValues[2].toInt()
             val year = normalizeYear(m.groupValues[3].toInt())
             toInstant(year, month, day, LocalTime.NOON, zone)?.let { return it }
+        }
+        AS_OF_MON.find(body)?.let { m ->
+            val day = m.groupValues[1].toInt()
+            val month = monthNumber(m.groupValues[2]) ?: return@let
+            val yearToken = m.groupValues.getOrNull(3).orEmpty()
+            val year = if (yearToken.isBlank()) fallbackYear else normalizeYear(yearToken.toInt())
+            val time = parseTime(m.groupValues.getOrNull(4), m.groupValues.getOrNull(5), m.groupValues.getOrNull(6))
+            toInstant(year, month, day, time, zone)?.let { return it }
         }
         return null
     }

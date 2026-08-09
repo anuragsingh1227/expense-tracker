@@ -78,7 +78,7 @@ interface TransactionDao {
         SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) FROM transactions
         WHERE type = 'CREDIT'
           AND timestamp >= :from AND timestamp < :to
-          AND category NOT IN ('Transfer', 'Refund')
+          AND category NOT IN ('Transfer', 'Refund', 'Investment')
         """,
     )
     fun observeIncomeTotal(from: Instant, to: Instant): Flow<Double>

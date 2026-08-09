@@ -8,6 +8,7 @@ import com.expensetracker.data.db.dao.TransactionDao
 import com.expensetracker.data.db.entity.TransactionEntity
 import com.expensetracker.domain.insights.CategoryMonthSpend
 import com.expensetracker.domain.insights.InvestmentReturnLinker
+import com.expensetracker.domain.insights.MandateDuplicateLinker
 import com.expensetracker.domain.insights.SelfTransferLinker
 import com.expensetracker.domain.model.Money
 import com.expensetracker.domain.model.PaymentMode
@@ -161,11 +162,13 @@ class TransactionRepositoryImpl @Inject constructor(
         val names = ownerNames ?: resolveConfiguredOwnerNames()
         val all = dao.getAllOnce().map { it.toDomain() }
         val selfIds = SelfTransferLinker.idsToRemove(SelfTransferLinker.findPairs(all, names))
-        val remaining = all.filter { it.id !in selfIds.toSet() }
+        var remaining = all.filter { it.id !in selfIds.toSet() }
         val investIds = InvestmentReturnLinker.idsToRemove(
             InvestmentReturnLinker.findPairs(remaining),
         )
-        val ids = (selfIds + investIds).distinct()
+        remaining = remaining.filter { it.id !in investIds.toSet() }
+        val mandateIds = MandateDuplicateLinker.idsToRemove(remaining)
+        val ids = (selfIds + investIds + mandateIds).distinct()
         if (ids.isEmpty()) return 0
         ids.chunked(200).forEach { dao.deleteByIds(it) }
         return ids.size

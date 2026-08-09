@@ -116,12 +116,15 @@ class SmsParser(
         return when {
             upper.contains("FASTAG") -> PaymentMode.FASTAG
             upper.contains("UPI") || UPI_ID.containsMatchIn(body) -> PaymentMode.UPI
-            upper.contains("CREDIT CARD") || upper.contains("CC ") -> PaymentMode.CARD_CREDIT
-            upper.contains("DEBIT CARD") || upper.contains("DC ") -> PaymentMode.CARD_DEBIT
+            upper.contains("CREDIT CARD") || Regex("""(?i)\bCC\b""").containsMatchIn(body) ->
+                PaymentMode.CARD_CREDIT
+            upper.contains("DEBIT CARD") || Regex("""(?i)\bDC\b""").containsMatchIn(body) ->
+                PaymentMode.CARD_DEBIT
             upper.contains("NACH") || upper.contains("ECS") || upper.contains("UMRN") ||
                 upper.contains("ACH DEBIT") || upper.contains("ACH-DR") ||
                 upper.contains("ACH/DR") || upper.contains("ACH DR") ||
-                ACH_DR_LINE.containsMatchIn(body) -> PaymentMode.NET_BANKING
+                upper.contains("ACH*") || ACH_DR_LINE.containsMatchIn(body) ->
+                PaymentMode.NET_BANKING
             upper.contains("NEFT") || upper.contains("IMPS") || upper.contains("RTGS") -> PaymentMode.NET_BANKING
             upper.contains("WALLET") -> PaymentMode.WALLET
             upper.contains("ATM") -> PaymentMode.CARD_DEBIT
@@ -251,9 +254,11 @@ class SmsParser(
                 upper.contains("SCRIPBOX") || upper.contains("WEALTHMANAGE") ||
                 upper.contains("WEALTH MANAGE") || upper.contains("FISDOM") ||
                 upper.contains("INDMONEY") || upper.contains("FUNDSINDIA") ||
-                // Mandate collect to an investment platform (NACH/ECS + wealth/MF keywords).
-                ((upper.contains("NACH") || upper.contains("ECS") || upper.contains("UMRN")) &&
-                    (upper.contains("WEALTH") || upper.contains("MUTUAL") || upper.contains("INVEST"))) ->
+                // Mandate collect to an investment platform (NACH/ECS/ACH-DR + wealth/MF).
+                (isMandateCollectRail(upper) &&
+                    (upper.contains("WEALTH") || upper.contains("MUTUAL") ||
+                        upper.contains("INVEST") || upper.contains("GROWW") ||
+                        upper.contains("SCRIPBOX"))) ->
                 Categories.INVESTMENT
             upper.contains("RECHARGE") -> Categories.RECHARGE
             upper.contains("ELECTRICITY") || upper.contains("WATER BILL") || upper.contains("GAS BILL") ->
@@ -268,19 +273,22 @@ class SmsParser(
         }
     }
 
-    /**
-     * Axis/HDFC compact ACH loan collect: `ACH-DR-HDFC BANK LTD-47138`.
-     * Bank/NBFC collectors on ACH/NACH/ECS rails are EMI, not generic spend —
-     * unless the payee is clearly an investment platform (handled earlier).
-     */
-    private fun isAchLoanEmi(upper: String): Boolean {
-        val achRail = upper.contains("ACH-DR") || upper.contains("ACH/DR") ||
+    private fun isMandateCollectRail(upper: String): Boolean =
+        upper.contains("ACH-DR") || upper.contains("ACH/DR") ||
             upper.contains("ACH DR") || upper.contains("ACH DEBIT") ||
             upper.contains("NACH") || upper.contains("ECS") || upper.contains("UMRN") ||
-            ACH_DR_LINE.containsMatchIn(upper)
-        if (!achRail) return false
+            upper.contains("ACH*") || ACH_DR_LINE.containsMatchIn(upper)
+
+    /**
+     * Axis/HDFC compact ACH loan collect: `ACH-DR-HDFC BANK LTD-47138`,
+     * ICICI `InfoACH*RACPC CUM`. Bank/NBFC collectors on ACH/NACH/ECS rails are
+     * EMI — unless the payee is clearly an investment platform.
+     */
+    private fun isAchLoanEmi(upper: String): Boolean {
+        if (!isMandateCollectRail(upper)) return false
         if (INVESTMENT_PAYEE_HINTS.any { upper.contains(it) }) return false
         if (upper.contains("WEALTH") || upper.contains("MUTUAL") || upper.contains("INVEST")) return false
+        if (upper.contains("RACPC")) return true
         return LOAN_EMI_COLLECTOR_HINTS.any { upper.contains(it) }
     }
 
@@ -357,6 +365,8 @@ class SmsParser(
 
     private fun extractNarration(body: String): String? {
         INFO_PATTERN.find(body)?.let { return it.groupValues[1].trim() }
+        // ICICI glued narration: "InfoACH*RACPC CUM" (no colon/space after Info).
+        INFO_ACH_GLUED.find(body)?.let { return it.groupValues[1].trim() }
         ACH_DR_LINE.find(body)?.let { match ->
             val payee = match.groupValues[1].trim()
             val ref = match.groupValues.getOrNull(2)?.takeIf { it.isNotBlank() }
@@ -372,15 +382,26 @@ class SmsParser(
         reference: String?,
         body: String,
     ): String {
-        val minute = timestamp.epochSecond / 60
-        val key = buildString {
-            append(sender.orEmpty().uppercase()).append('|')
-            append(amount.toPlainString()).append('|')
-            append(minute).append('|')
-            append(reference.orEmpty()).append('|')
-            // Use the full normalized body so same-amount same-minute UPI rows
-            // without a reference number don't collide and silently drop.
-            if (reference.isNullOrBlank()) append(body.replace(Regex("\\s+"), " ").take(256))
+        val umrn = UMRN_PATTERN.find(body)?.groupValues?.getOrNull(1)
+        // Mandate UMRN uniquely identifies one collect — drop minute so SMS retries
+        // ("today", redelivered a few minutes later) do not create duplicate rows.
+        val key = if (!umrn.isNullOrBlank()) {
+            buildString {
+                append(sender.orEmpty().uppercase()).append('|')
+                append(amount.toPlainString()).append('|')
+                append("UMRN:").append(umrn.uppercase())
+            }
+        } else {
+            val minute = timestamp.epochSecond / 60
+            buildString {
+                append(sender.orEmpty().uppercase()).append('|')
+                append(amount.toPlainString()).append('|')
+                append(minute).append('|')
+                append(reference.orEmpty()).append('|')
+                // Use the full normalized body so same-amount same-minute UPI rows
+                // without a reference number don't collide and silently drop.
+                if (reference.isNullOrBlank()) append(body.replace(Regex("\\s+"), " ").take(256))
+            }
         }
         val md = MessageDigest.getInstance("SHA-256")
         return md.digest(key.toByteArray()).joinToString("") { "%02x".format(it) }
@@ -403,7 +424,12 @@ class SmsParser(
         private val CREDIT_WORDS = listOf(
             "CREDITED", "CREDIT", "RECEIVED", "REFUND", "DEPOSITED", "SALARY",
         )
-        private val ACCOUNT_LAST4 = Regex("""(?i)a/c(?:\s*(?:no)?\.?)?\s*[Xx*]{2,}(\d{4})""")
+        // "A/c XX8291" / "Acc XX293" / "Acct XX293" / "Account XX8291" (3–4 trailing digits).
+        private val ACCOUNT_LAST4 = Regex(
+            """(?i)(?:a/c(?:\s*(?:no)?\.?)?|acct|acc(?:ount)?)\s*[Xx*]{2,}(\d{3,4})""",
+        )
+        private val UMRN_PATTERN = Regex("""(?i)UMRN[:\s]*([A-Z0-9]{6,})""")
+        private val INFO_ACH_GLUED = Regex("""(?i)info\s*(ACH\*[A-Z0-9 ./*-]{2,40})""")
         private val CARD_LAST4 =
             Regex("""(?i)card(?:\s*(?:no)?\.?)?\s*(?:ending(?:\s*with)?)?\s*(?:[Xx*]{2,})?\s*(\d{4})\b""")
         private val UPI_ID = Regex("""\b[a-zA-Z0-9._-]{2,}@[a-zA-Z]{2,}\b""")
@@ -468,8 +494,10 @@ class SmsParser(
             // Axis ACH compact: "ACH-DR-HDFC BANK LTD-47138" → mandate/loan id
             Regex("""(?i)ACH[-/ ]?DR[-/ ][A-Z0-9 .&']+?[-/ ](\d{3,})\b"""),
         )
+        // Prefer full ungrouped amounts (44996.19) before 1–3 digit + comma groups,
+        // otherwise "Bal INR 44996.19" incorrectly captures 449.
         private val BALANCE_PATTERN = Regex(
-            """(?i)(?:avl\.?\s*bal|available\s*balance|bal(?:ance)?)[:\s]*(?:rs\.?|inr|₹)?\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)""",
+            """(?i)(?:avl\.?\s*bal|available\s*balance|bal(?:ance)?)[:\s]*(?:rs\.?|inr|₹)?\s*([0-9]+(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)""",
         )
         private val INFO_PATTERN = Regex("""(?i)info[:\-\s]+([A-Z0-9 ./*-]{3,60})""")
     }

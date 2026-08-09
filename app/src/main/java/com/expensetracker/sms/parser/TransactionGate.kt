@@ -161,6 +161,41 @@ object TransactionGate {
             """\bSUCCESSFULLY\s+CREDITED\s+TO\s+(?:THE\s+)?BENEFICIARY\b""",
             RegexOption.IGNORE_CASE,
         ),
+        // Broker app status — not a bank movement (bank ACH/NACH/UPI is the fact).
+        Regex(
+            """\bWITHDRAWAL\s+(?:INSTRUCTION|REQUEST)\b.{0,80}\b(?:PROCESSED|PLACED|SUBMITTED)\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\b(?:PLACED|SUBMITTED)\s+A\s+WITHDRAWAL\s+REQUEST\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bYOUR\s+WITHDRAWAL\s+INSTRUCTION\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        // AMC/fund-house SIP purchase confirmations (Folio/NAV) — bank NACH is the ledger row.
+        Regex(
+            """\bYOUR\s+SIP\s+PURCHASE\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bDEAR\s+INVESTOR\b.{0,120}\b(?:SIP|FOLIO|NAV)\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        // Merchant "we have received online payment" (wording between received and payment).
+        Regex(
+            """\bWE(?:['’]VE|\s+HAVE)\s+RECEIVED\s+ONLINE\s+PAYMENT\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bRECEIVED\s+ONLINE\s+PAYMENT\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bTHANK\s+YOU\.\s*[A-Z0-9 ._-]+\.com\b""",
+            RegexOption.IGNORE_CASE,
+        ),
     )
 
     private val PAYMENT_TOWARDS_CARD = Regex(

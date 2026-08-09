@@ -24,8 +24,10 @@ package com.expensetracker.domain.insights
  *    Refunds/reversals offset spend via [LedgerBuckets], never inflate income.
  *    When both legs of an own-account move share a UPI/NEFT/IMPS reference,
  *    [SelfTransferLinker] removes the pair from Activity (zero net worth change).
- *    Broker "refund initiated" SMS are ignored; a matching Investment debit +
- *    bank return credit is cleared by [InvestmentReturnLinker] (net zero).
+ *    Broker "refund initiated" / withdrawal-request / AMC SIP-purchase acks are
+ *    ignored; a matching Investment debit + bank return credit is cleared by
+ *    [InvestmentReturnLinker] (net zero). Duplicate NACH + ACH-DR alerts for the
+ *    same mandate collect are collapsed by [MandateDuplicateLinker].
  *
  * 4. **Idempotent ingest.** Duplicate SMS share a dedupe hash; retries must not
  *    create a second economic effect ([com.expensetracker.sms.parser.SmsParser]).

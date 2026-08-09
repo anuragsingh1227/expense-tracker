@@ -53,4 +53,17 @@ class SmsDateExtractorTest {
             .toInstant()
         assertThat(instant).isEqualTo(expected)
     }
+
+    @Test
+    fun `parses IDBI as-of mon without mistaking time for year`() {
+        val body =
+            "IDBI Bank A/c NN59024 credited for INR 15000.00 through Net Banking. Bal INR 44996.19 (incl. of chq in clg)  as of 05 AUG 06:44 hrs."
+        val fallback2026 = Instant.parse("2026-08-09T12:00:00Z")
+        val instant = SmsDateExtractor.extract(body, zone, fallback2026)
+        val expected = LocalDate.of(2026, 8, 5)
+            .atTime(LocalTime.of(6, 44))
+            .atZone(zone)
+            .toInstant()
+        assertThat(instant).isEqualTo(expected)
+    }
 }
