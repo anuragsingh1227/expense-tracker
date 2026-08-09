@@ -26,14 +26,24 @@ class SmsParser(
         if (!isTransactional(body)) return null
 
         val amount = SmsAmountExtractor.extract(body) ?: return null
-        val type = detectType(body)
+        val ppfDeposit = isPpfDepositPosting(body)
+        // PPF SI / "credited in PPF" is money parked in PPF — book as DEBIT Investment
+        // even when the bank wording uses "credited". Contribution-received thank-you
+        // SMS are rejected earlier by TransactionGate.
+        val type = if (ppfDeposit) TransactionType.DEBIT else detectType(body)
         val bank = BankSenders.identify(sms.sender)
         val merchantMatch = merchants.match(body)
-        val merchant = merchantMatch?.displayName ?: extractMerchant(body)
+        val merchant = when {
+            ppfDeposit -> "PPF"
+            else -> merchantMatch?.displayName ?: extractMerchant(body)
+        }
         val labeled = labelRules.match(sms.sender, body, merchant)
-        // Ledger-correctness categories (Transfer/Refund) must win over merchant/dictionary
-        // matches — e.g. "Refund from AMAZON" must not be booked as Shopping income.
-        val category = labeled ?: resolveAutoCategory(body, type, merchantMatch?.category)
+        // Ledger-correctness categories (Transfer/Refund/Investment-PPF) must win over
+        // merchant/dictionary matches — e.g. "Refund from AMAZON" must not be Shopping.
+        val category = when {
+            ppfDeposit -> Categories.INVESTMENT
+            else -> labeled ?: resolveAutoCategory(body, type, merchantMatch?.category)
+        }
         val paymentMode = detectPaymentMode(body)
         // Prefer date written in the SMS (paste/share import has no telephony timestamp).
         val timestamp = SmsDateExtractor.extract(body, zone, sms.timestamp)
@@ -181,6 +191,23 @@ class SmsParser(
             upper.contains("CHARGEBACK")
     }
 
+    /**
+     * Authoritative PPF deposit posting (SI / credited-in-PPF / deduction).
+     * Contribution-received thank-you SMS are rejected by [TransactionGate] instead.
+     */
+    private fun isPpfDepositPosting(body: String): Boolean {
+        val upper = body.uppercase()
+        if (!upper.contains("PPF") && !upper.contains("PUBLIC PROVIDENT")) return false
+        return upper.contains("SI TRANSACTION") ||
+            upper.contains("STANDING INSTRUCTION") ||
+            upper.contains("DEBITED") ||
+            upper.contains("DEDUCTION") ||
+            upper.contains("CREDITED IN PPF") ||
+            upper.contains("CREDITED TO PPF") ||
+            upper.contains("CREDITED IN YOUR PPF") ||
+            upper.contains("DEPOSIT") && (upper.contains("PPF") || upper.contains("PUBLIC PROVIDENT"))
+    }
+
     private fun inferCategory(body: String, type: TransactionType): String {
         val upper = body.uppercase()
         return when {
@@ -192,7 +219,9 @@ class SmsParser(
             upper.contains("INSURANCE") || upper.contains("INS PREMIUM") || upper.contains("PREMIUM PAID") ->
                 Categories.INSURANCE
             upper.contains("MUTUAL FUND") || upper.contains("SIP") || upper.contains("ZERODHA") ||
-                upper.contains("GROWW") -> Categories.INVESTMENT
+                upper.contains("GROWW") || upper.contains("PPF") || upper.contains("PUBLIC PROVIDENT") ||
+                upper.contains("NPS") || upper.contains("NATIONAL PENSION") ->
+                Categories.INVESTMENT
             upper.contains("RECHARGE") -> Categories.RECHARGE
             upper.contains("ELECTRICITY") || upper.contains("WATER BILL") || upper.contains("GAS BILL") ->
                 Categories.UTILITIES
@@ -221,20 +250,28 @@ class SmsParser(
         if (upper.contains("TOWARDS") && upper.contains("CARD")) return true
         if (upper.contains("PAYMENT TO") && (upper.contains("CREDIT CARD") || upper.contains(" CC "))) return true
         if (upper.contains("CREDITED TO YOUR CARD") || upper.contains("CREDITED TO YOUR CC")) return true
-        // IMPS/NEFT self-move templates: "Acct A debited ... & Acct B credited"
+        // Explicit self-transfer wording from banks / UPI apps.
+        if (upper.contains("SELF TRANSFER") || upper.contains("SELF-TRANSFER") ||
+            upper.contains("TO SELF") || upper.contains("FROM SELF")
+        ) {
+            return true
+        }
+        // IMPS/NEFT/UPI self-move templates: "Acct A debited ... NAME credited"
         if (upper.contains("DEBITED") && upper.contains("CREDITED") &&
-            (upper.contains("IMPS") || upper.contains("NEFT") || upper.contains("RTGS"))
+            (upper.contains("IMPS") || upper.contains("NEFT") || upper.contains("RTGS") ||
+                upper.contains("UPI"))
         ) {
             return true
         }
         if (Regex("""ACCT\s+XX\d+\s+DEBITED.*ACCT\s+XX\d+\s+CREDITED""").containsMatchIn(upper)) {
             return true
         }
-        // Owner-name hint on a bank transfer SMS → own-account move.
+        // Owner-name hint on a bank transfer / UPI self-move SMS → own-account move.
         val names = ownerNames().map { it.trim() }.filter { it.length >= 2 }
         if (names.isNotEmpty() &&
             names.any { name -> upper.contains(name.uppercase()) } &&
             (upper.contains("NEFT") || upper.contains("IMPS") || upper.contains("RTGS") ||
+                upper.contains("UPI") ||
                 upper.contains("TRANSFERRED") || upper.contains("TRANSFER"))
         ) {
             return true

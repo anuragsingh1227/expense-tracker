@@ -109,6 +109,26 @@ object TransactionGate {
             """\bCREDITED\s+TO\s+YOUR\s+(?:CREDIT\s+)?CARD\b""",
             RegexOption.IGNORE_CASE,
         ),
+        Regex("""\bPAYMENT\b.{0,48}\bRECEIVED\s+AGAINST\b""", RegexOption.IGNORE_CASE),
+        // Investment contribution acknowledgements (PPF/NPS/SIP) — not expenses.
+        // Real SI/"credited in PPF"/savings debits are kept and booked as Investment.
+        Regex(
+            """\bWE\s+(?:HAVE\s+)?RECEIVED\s+(?:YOUR\s+)?(?:CONTRIBUTION|TRANSACTION)\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex("""\bCONTRIBUTION\s+(?:HAS\s+BEEN\s+|WAS\s+)?RECEIVED\b""", RegexOption.IGNORE_CASE),
+        Regex(
+            """\b(?:SIP|NPS|PPF|PROVIDENT)\b.{0,48}\bCONTRIBUTION\b.{0,48}\bRECEIVED\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bRECEIVED\b.{0,48}\b(?:SIP|NPS|PPF|PROVIDENT)\b.{0,48}\bCONTRIBUTION\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bRECEIVED\s+IN\s+YOUR\s+(?:PPF|NPS|PUBLIC\s+PROVIDENT)\b""",
+            RegexOption.IGNORE_CASE,
+        ),
     )
 
     private val PAYMENT_TOWARDS_CARD = Regex(
@@ -171,10 +191,46 @@ object TransactionGate {
         // Issuer/biller "payment … towards your Credit Card" with no debit/spend verb —
         // checked in code (not a search-position lookahead) so real BillPay debits stay.
         if (isCardPaymentAckWithoutMovement(trimmed, upper)) return false
+        // PPF/NPS/SIP "contribution received / thank you" acks without an SI/debit posting.
+        if (isInvestmentContributionAck(upper)) return false
         if (!SmsAmountExtractor.AMOUNT_PATTERN.containsMatchIn(trimmed)) return false
         val debit = STRONG_DEBIT.any { upper.contains(it) }
         val credit = STRONG_CREDIT.any { upper.contains(it) }
         return debit || credit
+    }
+
+    /**
+     * Investment vehicle thank-you / contribution-received SMS. Standing-instruction
+     * and "credited in PPF" postings are real deposits and must stay for Investment booking.
+     */
+    private fun isInvestmentContributionAck(upper: String): Boolean {
+        val vehicle = upper.contains("PPF") ||
+            upper.contains("PUBLIC PROVIDENT") ||
+            upper.contains("NPS") ||
+            upper.contains("NATIONAL PENSION") ||
+            upper.contains("SIP")
+        if (!vehicle) return false
+        // Authoritative deposit postings — keep for the parser to book as Investment.
+        if (upper.contains("SI TRANSACTION") ||
+            upper.contains("STANDING INSTRUCTION") ||
+            upper.contains("DEBITED") ||
+            upper.contains("DEDUCTION") ||
+            upper.contains("CREDITED IN PPF") ||
+            upper.contains("CREDITED TO PPF") ||
+            upper.contains("CREDITED IN YOUR PPF") ||
+            upper.contains("CREDITED IN NPS") ||
+            upper.contains("CREDITED TO NPS")
+        ) {
+            return false
+        }
+        val contributionOrReceived =
+            upper.contains("CONTRIBUTION") ||
+                upper.contains("RECEIVED IN YOUR PPF") ||
+                upper.contains("RECEIVED IN PPF") ||
+                upper.contains("RECEIVED IN YOUR NPS") ||
+                (upper.contains("RECEIVED") && upper.contains("THANK YOU"))
+        return contributionOrReceived &&
+            (upper.contains("RECEIVED") || upper.contains("THANK YOU"))
     }
 
     /**

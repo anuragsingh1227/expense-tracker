@@ -57,6 +57,30 @@ object SampleSms {
     const val BILLER_PAYMENT_RECEIVED_SUCCESS =
         "Payment of Rs 899.00 received successfully for your electricity bill. Ref BBPS123456."
 
+    /** PPF contribution thank-you — confirmation only; must not create a ledger row. */
+    const val PPF_CONTRIBUTION_RECEIVED_ACK =
+        "ICICI Bank: Amount of INR 10,000 received in your PPF account XX9988 contribution. Thank you."
+
+    /** NPS contribution received ack — confirmation only. */
+    const val NPS_CONTRIBUTION_RECEIVED_ACK =
+        "We have received your contribution of Rs 5,000 towards NPS Tier I. Thank you."
+
+    /** Real PPF SI posting — book as DEBIT Investment (not Transfer/spend). */
+    const val IDBI_PPF_SI_CREDIT =
+        "SI Transaction of Rs 12000 successfully credited in PPF Ac No ****************0079 on 07/08/2026 -IDBI Bank"
+
+    /** Explicit UPI self-transfer credit — Transfer, never spend/income. */
+    const val AXIS_SELF_TRANSFER_CREDIT =
+        "Axis Bank: Your A/c XX5566 is credited with INR 5,000 (UPI Ref 612345) from SELF TRANSFER."
+
+    /** Card spend at online merchant — real expense. */
+    const val HDFC_ZOMATO_CARD_SPEND =
+        "HDFC Bank: You spent Rs. 549 at ZOMATO on Credit Card XX1234 on 2026-08-10. Noted txn?"
+
+    /** Issuer payment-received against card — confirmation only. */
+    const val SBI_CARD_PAYMENT_RECEIVED_AGAINST =
+        "SBI Card: Payment of INR 10,000 received against your Credit Card XX1234 on 2026-08-12."
+
     /** Public DLT-style spend alert (SMS Gateway Center sample shape). */
     const val CARD_SPENT_JIO =
         "Alert: You've spent INR 555.00 on your bank card **9123 at BD JIO MONEY on 05/08/2026 at 11:07 IST."
