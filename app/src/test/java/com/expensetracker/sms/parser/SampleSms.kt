@@ -34,9 +34,69 @@ object SampleSms {
     const val IMPS_SELF_TRANSFER =
         "Acct XX126 debited with INR 4,600.00 on 23-Jul-2026 & Acct XX791 credited. IMPS: XXX410XX."
 
-    /** Card account credit for a bill payment — not spend income. */
+    /**
+     * Card-side bill-payment posting — duplicate of the bank debit SMS.
+     * Must be ignored entirely (not booked as Transfer/income/spend).
+     */
     const val CARD_PAYMENT_CREDITED =
         "Dear bank cardmember, Payment of Rs 2487 was credited to your card ending 1234 on 05/Aug/2026."
+
+    /** Issuer acknowledgement — not a ledger movement. */
+    const val WE_RECEIVED_PAYMENT_CREDIT_CARD =
+        "Dear Customer, we have received payment of INR 12,500.00 towards your Credit Card XX1014 on 08-08-26. Thank you."
+
+    /** Issuer posting ack without "received"/"thank you" — still not a bank movement. */
+    const val CARD_PAYMENT_POSTED_ACK =
+        "Dear Customer, payment of INR 8,000.00 towards your Credit Card XX1014 has been posted on 08-08-26. Avl limit Rs 42,000.00"
+
+    /** Merchant/third-party ack mentioning the card rail — not a ledger movement. */
+    const val MERCHANT_RECEIVED_PAYMENT_FROM_CARD =
+        "We have received payment from credit card ending 4321 for Rs 1,299.00 at FLIPKART on 15-04-24. Order confirmed."
+
+    /** Generic biller "payment received successfully" — not a bank movement. */
+    const val BILLER_PAYMENT_RECEIVED_SUCCESS =
+        "Payment of Rs 899.00 received successfully for your electricity bill. Ref BBPS123456."
+
+    /** PPF contribution thank-you — confirmation only; must not create a ledger row. */
+    const val PPF_CONTRIBUTION_RECEIVED_ACK =
+        "ICICI Bank: Amount of INR 10,000 received in your PPF account XX9988 contribution. Thank you."
+
+    /** NPS contribution received ack — confirmation only. */
+    const val NPS_CONTRIBUTION_RECEIVED_ACK =
+        "We have received your contribution of Rs 5,000 towards NPS Tier I. Thank you."
+
+    /** Real PPF SI posting — book as DEBIT Investment (not Transfer/spend). */
+    const val IDBI_PPF_SI_CREDIT =
+        "SI Transaction of Rs 12000 successfully credited in PPF Ac No ****************0079 on 07/08/2026 -IDBI Bank"
+
+    /** Explicit UPI self-transfer credit — Transfer, never spend/income. */
+    const val AXIS_SELF_TRANSFER_CREDIT =
+        "Axis Bank: Your A/c XX5566 is credited with INR 5,000 (UPI Ref 612345) from SELF TRANSFER."
+
+    /** Card spend at online merchant — real expense. */
+    const val HDFC_ZOMATO_CARD_SPEND =
+        "HDFC Bank: You spent Rs. 549 at ZOMATO on Credit Card XX1234 on 2026-08-10. Noted txn?"
+
+    /** Issuer payment-received against card — confirmation only. */
+    const val SBI_CARD_PAYMENT_RECEIVED_AGAINST =
+        "SBI Card: Payment of INR 10,000 received against your Credit Card XX1234 on 2026-08-12."
+
+    /**
+     * Axis compact UPI debit with amount *before* the verb ("INR X debited").
+     * Must stay in the ledger (was dropped by the gate previously).
+     */
+    val AXIS_INR_DEBITED_UPI_P2A = """
+INR 2500.00 debited
+A/c no. XX8291
+08-08-26, 14:46:26
+UPI/P2A/111991242206/LALAWMPUII
+Not you? SMS BLOCKUPI Cust ID to 919951860002
+Axis Bank
+""".trimIndent()
+
+    /** NACH mandate to wealth/MF platform — Investment, not spend. */
+    const val AXIS_NACH_SCRIPBOX =
+        "NACH debit towards SCRIPBOXWEALTHMANAGE for INR 1,300.00 with UMRN UTIB7010806200000399 has been successfully processed in A/c no. XX8291 today - Axis Bank"
 
     /** Public DLT-style spend alert (SMS Gateway Center sample shape). */
     const val CARD_SPENT_JIO =
@@ -183,4 +243,58 @@ Rs 1,299.00 spent on AXIS Bank Credit Card ending 4321 at FLIPKART on 05-Aug-26
 
 Get up to Rs 500 cashback on UPI spends this weekend. Shop now.
 """
+
+    /** ICICI→Axis own-account UPI self-transfer debit — pairs with [OWN_ACCOUNT_UPI_CREDIT_100000]. */
+    const val OWN_ACCOUNT_UPI_DEBIT_100000 =
+        "ICICI Bank Acct XX293 debited for Rs 100000.00 on 01-Aug-26; ANURAG SINGH credited. UPI:781919319954. Call 18002662 for dispute. SMS BLOCK 293 to 9215676766."
+
+    /** Matching Axis credit leg for the same UPI self-transfer. */
+    val OWN_ACCOUNT_UPI_CREDIT_100000 = """
+INR 100000.00 credited
+A/c no. XX8291
+01-08-26, 07:48:42 IST
+UPI/P2A/781919319954/ANURAG SI/ICIC/Paym - Axis Bank
+""".trimIndent()
+
+    /** Motilal Oswal MF UPI debit — Investment (not Transfer), may later be refunded. */
+    const val MOTILAL_OSWAL_MF_UPI_DEBIT_40000 =
+        "ICICI Bank Acct XX293 debited for Rs 40000.00 on 03-Aug-26; MotilalOswalMF credited. UPI:479986606620. Call 18002662 for dispute. SMS BLOCK 293 to 9215676766."
+
+    /**
+     * Broker/app refund-initiated ack — confirmation only; bank credit SMS is the ledger fact.
+     */
+    const val ETMONEY_REFUND_INITIATED_40000 =
+        "Dear ANURAG SINGH, refund of Rs. 40,000 against your Investment in Balanced+ Portfolio (Order Number 101-0240413-0013485) has been initiated. It may take 5-7 working days for same to get processed. - ETMONEY"
+
+    /** Anonymous IMPS credit returning investment capital (pairs with Motilal debit). */
+    const val ICICI_IMPS_MOBILE_CREDIT_40000 =
+        "ICICI Bank Account XX293 is credited with Rs 40,000.00 on 01-Aug-26 by Account linked to mobile number XXXXX00000. IMPS Ref. no. 621321435842."
+
+    /** Axis compact ACH loan EMI collect (HDFC Bank mandate). */
+    val AXIS_ACH_DR_HDFC_EMI = """
+Debit INR 27136.00
+Axis Bank A/c XX8291
+05-08-26 09:40:02
+ACH-DR-HDFC BANK LTD-47138
+WhatsApp BAL to 917036165000
+Not You? SMS BLOCKALL CustID to 919951860002
+""".trimIndent()
+
+    /**
+     * Outward NEFT delivery confirmation to someone else's account — not a ledger
+     * movement on the sender's a/c (the debit SMS is the row to keep).
+     */
+    const val AXIS_NEFT_CREDITED_TO_BENEFICIARY =
+        "Your NEFT txn with Ref. No. AXOMB22002006227 for INR 10000.00 is credited to beneficiary Manju Singh, A/c no. XX5116 on 08-08-26 at 11:52:35 IST - Axis Bank"
+
+    /**
+     * Real card grocery spend. Footer advertises EMI conversion — must NOT book as EMI.
+     */
+    const val ICICI_CARD_AVENUE_SUPERMAR_EMI_OFFER =
+        "Rs 8,646.47 spent on ICICI Bank Card XX1014 on 26-Jul-26 at Avenue Supermar. Avl Lmt: Rs 2,06,758.37. To dispute, call 18002662/SMS BLOCK 1014 to 9215676766. To convert this txn to EMI give a missed call on 9924667667. Know more about EMI conversion at https://icici.co/ICICIT/iIPGGt"
+
+    /** ICICI UPI to Apollo — Medical spend, not Transfer ("; NAME credited" template). */
+    const val ICICI_UPI_APOLLO_PHARMACY =
+        "ICICI Bank Acct XX293 debited for Rs 600.07 on 25-Jul-26; Apollo Pharmacy credited. UPI:657221332249. Call 18002662 for dispute. SMS BLOCK 293 to 9215676766."
 }
+

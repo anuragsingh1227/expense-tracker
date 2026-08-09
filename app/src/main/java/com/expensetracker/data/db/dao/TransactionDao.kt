@@ -78,7 +78,7 @@ interface TransactionDao {
         SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) FROM transactions
         WHERE type = 'CREDIT'
           AND timestamp >= :from AND timestamp < :to
-          AND category NOT IN ('Transfer', 'Refund')
+          AND category NOT IN ('Transfer', 'Refund', 'Investment')
         """,
     )
     fun observeIncomeTotal(from: Instant, to: Instant): Flow<Double>
@@ -106,10 +106,16 @@ interface TransactionDao {
 
     @Query(
         """
-        SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) FROM transactions
-        WHERE type = 'DEBIT'
-          AND timestamp >= :from AND timestamp < :to
-          AND category = 'Investment'
+        SELECT COALESCE(SUM(
+            CASE
+                WHEN type = 'DEBIT' AND category = 'Investment'
+                    THEN CAST(amount AS REAL)
+                WHEN type = 'CREDIT' AND category = 'Investment'
+                    THEN -CAST(amount AS REAL)
+                ELSE 0
+            END
+        ), 0) FROM transactions
+        WHERE timestamp >= :from AND timestamp < :to
         """,
     )
     fun observeInvestmentTotal(from: Instant, to: Instant): Flow<Double>
@@ -156,7 +162,7 @@ interface TransactionDao {
     )
     fun search(query: String?): Flow<List<TransactionEntity>>
 
-    @Query("SELECT id, rawSms FROM transactions")
+    @Query("SELECT id, rawSms, manuallyEdited FROM transactions")
     suspend fun getIdAndRawSms(): List<IdRawSms>
 
     @Query("DELETE FROM transactions WHERE id IN (:ids)")
@@ -171,4 +177,8 @@ data class CategoryMonthTotal(
     val total: Double,
 )
 
-data class IdRawSms(val id: Long, val rawSms: String?)
+data class IdRawSms(
+    val id: Long,
+    val rawSms: String?,
+    val manuallyEdited: Boolean = false,
+)

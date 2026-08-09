@@ -247,7 +247,7 @@ fun PeriodFilterRow(
             ) {
                 Text(
                     label,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = if (selectedNow) FontWeight.Bold else FontWeight.Medium,
                 )
@@ -318,9 +318,11 @@ fun TransactionListItem(
 ) {
     val isCredit = tx.type == TransactionType.CREDIT
     val sign = if (isCredit) "+" else "−"
-    val amountColor = if (isCredit) ExpenseColors.Income else MaterialTheme.colorScheme.onSurface
+    val amountColor = if (isCredit) ExpenseColors.Income else ExpenseColors.Coral
     val date = tx.timestamp.atZone(ZoneId.systemDefault()).format(TX_FMT)
     val title = tx.merchant ?: tx.category
+    val bankBit = tx.bank?.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+    val meta = "${tx.category}$bankBit · $date"
     val a11y = "$title, $sign${tx.amount.maskableFormatInr()}, ${tx.category}, $date"
 
     Row(
@@ -386,7 +388,7 @@ fun TransactionListItem(
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                "${tx.category} · $date",
+                meta,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -394,19 +396,12 @@ fun TransactionListItem(
             )
         }
         Spacer(Modifier.width(8.dp))
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                "$sign${tx.amount.maskableFormatInr()}",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = amountColor,
-            )
-            Text(
-                stringResource(if (isCredit) R.string.type_credit else R.string.type_debit),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        Text(
+            "$sign${tx.amount.maskableFormatInr()}",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = amountColor,
+        )
     }
 }
 
