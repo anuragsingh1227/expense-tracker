@@ -44,12 +44,10 @@ class LedgerCalculationTest {
     }
 
     @Test
-    fun `card bill credited SMS is Transfer credit not income`() {
-        val tx = parser.parse(RawSms("VM-AXISBK", SampleSms.CARD_PAYMENT_CREDITED, fallback))!!
-        assertThat(tx.type).isEqualTo(TransactionType.CREDIT)
-        assertThat(tx.category).isEqualTo(Categories.TRANSFER)
-        assertThat(LedgerBuckets.isIncome(tx)).isFalse()
-        assertThat(tx.amount.amount).isEqualTo(BigDecimal("2487.00"))
+    fun `card bill credited SMS is ignored as third-party ack not a ledger row`() {
+        // Card-side "payment credited to your card" duplicates the bank debit SMS.
+        assertThat(parser.parse(RawSms("VM-AXISBK", SampleSms.CARD_PAYMENT_CREDITED, fallback))).isNull()
+        assertThat(TransactionGate.isTransactional(SampleSms.CARD_PAYMENT_CREDITED)).isFalse()
     }
 
     @Test
@@ -125,7 +123,7 @@ class LedgerCalculationTest {
         assertThat(spend.amount).isEqualTo(BigDecimal("3336.00"))
         assertThat(invest.amount).isEqualTo(BigDecimal("5000.00"))
         assertThat(income.amount).isEqualTo(BigDecimal("52000.00"))
-        assertThat(transfers).hasSize(3) // BillPay debit, IMPS debit, card payment credit
+        assertThat(transfers).hasSize(2) // BillPay debit, IMPS debit (card-side credit ack ignored)
         assertThat(SpendMath.netCashFlow(income, spend, invest).amount)
             .isEqualTo(BigDecimal("43664.00"))
 
@@ -207,15 +205,14 @@ class LedgerCalculationTest {
     fun `credit card purchase is spend once and its auto-pay pair is Transfer not double-counted`() {
         val purchase = parser.parse(RawSms("AD-ICICIB", SampleSms.ICICI_CARD_SPEND_WITH_DISPUTE, fallback))!!
         val billDebit = parser.parse(RawSms("VM-HDFCBK", SampleSms.PAYMENT_TO_CREDIT_CARD_TRANSFER, fallback))!!
-        val billCredit = parser.parse(RawSms("VM-ICICIB", SampleSms.CARD_PAYMENT_CREDITED, fallback))!!
+        // Card-side payment ack must not enter the ledger at all.
+        assertThat(parser.parse(RawSms("VM-ICICIB", SampleSms.CARD_PAYMENT_CREDITED, fallback))).isNull()
 
         assertThat(LedgerBuckets.isSpend(purchase)).isTrue()
         assertThat(LedgerBuckets.isTransfer(billDebit)).isTrue()
-        assertThat(LedgerBuckets.isTransfer(billCredit)).isTrue()
 
-        val all = listOf(purchase, billDebit, billCredit)
-        // Only the card purchase counts toward spend — the 3200 debit + 2487 credit cancel
-        // out as Transfers and never inflate spend or income.
+        val all = listOf(purchase, billDebit)
+        // Only the card purchase counts toward spend — the bill-pay debit is Transfer.
         assertThat(LedgerBuckets.spend(all).amount).isEqualTo(purchase.amount.amount)
         assertThat(LedgerBuckets.income(all).amount).isEqualTo(BigDecimal.ZERO.setScale(2))
     }

@@ -272,6 +272,36 @@ class SmsParserTest {
     }
 
     @Test
+    fun `issuer we-received-payment credit-card ack is ignored`() {
+        assertThat(parser.isTransactional(SampleSms.WE_RECEIVED_PAYMENT_CREDIT_CARD)).isFalse()
+        assertThat(parser.parse(raw("AD-ICICIT-S", SampleSms.WE_RECEIVED_PAYMENT_CREDIT_CARD))).isNull()
+    }
+
+    @Test
+    fun `issuer payment-posted towards credit-card ack is ignored`() {
+        assertThat(parser.isTransactional(SampleSms.CARD_PAYMENT_POSTED_ACK)).isFalse()
+        assertThat(parser.parse(raw("AD-ICICIT-S", SampleSms.CARD_PAYMENT_POSTED_ACK))).isNull()
+    }
+
+    @Test
+    fun `merchant received-payment-from-card ack is ignored`() {
+        assertThat(parser.isTransactional(SampleSms.MERCHANT_RECEIVED_PAYMENT_FROM_CARD)).isFalse()
+        assertThat(parser.parse(raw("AD-FLIPKT", SampleSms.MERCHANT_RECEIVED_PAYMENT_FROM_CARD))).isNull()
+    }
+
+    @Test
+    fun `biller payment-received-successfully ack is ignored`() {
+        assertThat(parser.isTransactional(SampleSms.BILLER_PAYMENT_RECEIVED_SUCCESS)).isFalse()
+        assertThat(parser.parse(raw("VM-BILLDK", SampleSms.BILLER_PAYMENT_RECEIVED_SUCCESS))).isNull()
+    }
+
+    @Test
+    fun `card-side payment-credited-to-card ack is ignored`() {
+        assertThat(parser.isTransactional(SampleSms.CARD_PAYMENT_CREDITED)).isFalse()
+        assertThat(parser.parse(raw("VM-AXISBK", SampleSms.CARD_PAYMENT_CREDITED))).isNull()
+    }
+
+    @Test
     fun `ICICI bank-side ATD auto-debit is the kept record, parsed as Transfer`() {
         val tx = parser.parse(raw("AD-ICICIT-S", SampleSms.ICICI_ACC_DEBITED_ATD_AUTO_DEBIT))!!
         assertThat(tx.type).isEqualTo(TransactionType.DEBIT)

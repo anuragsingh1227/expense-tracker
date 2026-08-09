@@ -10,16 +10,15 @@ import java.time.Duration
  * removed from Activity (they're already excluded from spend/income totals via
  * the `Transfer` category — this only declutters the list).
  *
- * Candidates are restricted to transactions the parser already categorized as
- * [Categories.TRANSFER]. This is the key safety property: an unrelated spend
- * (e.g. a Food debit) or unrelated income can never be swept up just because it
- * happens to share an amount and a time window with a real transfer — it's
- * simply not in the candidate pool.
+ * Matching rules (in order):
+ * 1. **Shared bank reference/UTR/UPI id** across any non-manually-edited
+ *    debit↔credit of equal amount in the time window — authoritative. Safe
+ *    even when an older parse miscategorized a leg (e.g. UPI self-move booked
+ *    as spend before Transfer detection improved).
+ * 2. Within rows already categorized [Categories.TRANSFER], the weaker
+ *    "owner name mentioned" heuristic as a fallback when no reference exists.
  *
- * Within that pool, a pair sharing the same bank-assigned reference/UTR is an
- * authoritative match (both legs of one transfer always cite the same
- * reference) and is preferred over the weaker "owner name mentioned somewhere"
- * heuristic, which is used only as a fallback for legs without a reference.
+ * Unrelated same-amount spends without a shared reference are never paired.
  */
 object SelfTransferLinker {
 
@@ -44,41 +43,87 @@ object SelfTransferLinker {
         window: Duration = MATCH_WINDOW,
     ): List<PairMatch> {
         val nameHints = ownerNames.map { it.trim().uppercase() }.filter { it.length >= 2 }
+        val editable = transactions.filter { !it.manuallyEdited }
+        val allDebits = editable.filter { it.type == TransactionType.DEBIT }.sortedBy { it.timestamp }
+        val allCredits = editable.filter { it.type == TransactionType.CREDIT }.sortedBy { it.timestamp }
 
-        val candidates = transactions.filter { it.category == Categories.TRANSFER && !it.manuallyEdited }
-        val debits = candidates.filter { it.type == TransactionType.DEBIT }.sortedBy { it.timestamp }
-        val credits = candidates.filter { it.type == TransactionType.CREDIT }.sortedBy { it.timestamp }
-
+        val usedDebitIds = mutableSetOf<Long>()
         val usedCreditIds = mutableSetOf<Long>()
         val pairs = mutableListOf<PairMatch>()
 
-        for (debit in debits) {
-            val candidatesForDebit = credits.filter { credit ->
-                credit.id !in usedCreditIds && amountsEqual(debit, credit) && withinWindow(debit, credit, window)
-            }
-            if (candidatesForDebit.isEmpty()) continue
+        // Pass 1: shared reference — authoritative across any category.
+        // Prefer stored referenceNumber; fall back to raw SMS for legacy rows.
+        // Also allow NEFT UTR prefix matches (ICICI truncates "IN12" vs full "IN1261…").
+        for (debit in allDebits) {
+            val ref = effectiveReference(debit) ?: continue
+            val match = allCredits.firstOrNull { credit ->
+                credit.id !in usedCreditIds &&
+                    referencesMatch(ref, effectiveReference(credit)) &&
+                    amountsEqual(debit, credit) &&
+                    withinWindow(debit, credit, window)
+            } ?: continue
+            usedDebitIds += debit.id
+            usedCreditIds += match.id
+            pairs += PairMatch(debit = debit, credit = match)
+        }
 
-            // Prefer a shared reference/UTR — authoritative, no ambiguity.
-            val referenceMatch = debit.referenceNumber
-                ?.takeIf { it.isNotBlank() }
-                ?.let { ref -> candidatesForDebit.firstOrNull { it.referenceNumber == ref } }
-
-            val match = referenceMatch
-                ?: candidatesForDebit
-                    .filter { nameHints.isNotEmpty() && mentionsOwner(debit, it, nameHints) }
-                    // Weaker signal: prefer the closest-in-time candidate, not just the first.
-                    .minByOrNull { Duration.between(debit.timestamp, it.timestamp).abs() }
+        // Pass 2: Transfer-category + owner-name heuristic when refs don't already
+        // pair (e.g. Axis IMPS/P2A/…/Anur debit vs IDBI credit with no shared UTR).
+        val transferDebits = allDebits.filter {
+            it.id !in usedDebitIds && it.category == Categories.TRANSFER
+        }
+        val transferCredits = allCredits.filter {
+            it.id !in usedCreditIds && it.category == Categories.TRANSFER
+        }
+        for (debit in transferDebits) {
+            if (debit.id in usedDebitIds) continue
+            val match = transferCredits
+                .filter { credit ->
+                    credit.id !in usedCreditIds &&
+                        amountsEqual(debit, credit) &&
+                        withinWindow(debit, credit, window) &&
+                        nameHints.isNotEmpty() &&
+                        mentionsOwner(debit, credit, nameHints)
+                }
+                .minByOrNull { Duration.between(debit.timestamp, it.timestamp).abs() }
                 ?: continue
-
+            usedDebitIds += debit.id
             usedCreditIds += match.id
             pairs += PairMatch(debit = debit, credit = match)
         }
         return pairs
     }
 
+    /** Stored ref, or one parsed from [Transaction.rawSms] for legacy rows. */
+    internal fun effectiveReference(tx: Transaction): String? =
+        tx.referenceNumber?.takeIf { it.isNotBlank() } ?: extractReferenceFromRaw(tx.rawSms)
+
+    internal fun extractReferenceFromRaw(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        RAW_REFERENCE_PATTERNS.forEach { pattern ->
+            pattern.find(raw)?.let { return it.groupValues[1] }
+        }
+        return null
+    }
+
     /** Flattened ids of both legs — convenient for bulk delete. */
     fun idsToRemove(pairs: List<PairMatch>): List<Long> =
         pairs.flatMap { listOf(it.debit.id, it.credit.id) }.filter { it > 0 }
+
+    /**
+     * Exact UTR match, or one side is a truncated prefix of the other
+     * (ICICI `InfoBIL*NEFT*IN12` vs Axis `NEFT/IN12618244087080/…`).
+     */
+    internal fun referencesMatch(a: String?, b: String?): Boolean {
+        if (a.isNullOrBlank() || b.isNullOrBlank()) return false
+        if (a.equals(b, ignoreCase = true)) return true
+        val x = a.uppercase()
+        val y = b.uppercase()
+        val shorter = if (x.length <= y.length) x else y
+        val longer = if (x.length <= y.length) y else x
+        // Require a meaningful prefix (avoid matching "IN" alone).
+        return shorter.length >= 4 && longer.startsWith(shorter)
+    }
 
     private fun amountsEqual(a: Transaction, b: Transaction): Boolean =
         a.amount.amount.compareTo(b.amount.amount) == 0
@@ -105,4 +150,13 @@ object SelfTransferLinker {
             Regex("""\b${Regex.escape(hint)}\b""").containsMatchIn(haystack)
         }
     }
+
+    private val RAW_REFERENCE_PATTERNS = listOf(
+        Regex("""(?i)UPI(?:\s*ref)?[:\s]*([0-9]{9,})"""),
+        Regex("""(?i)UPI/[A-Z0-9]+/([0-9]{9,})"""),
+        Regex("""(?i)(?:NEFT|IMPS|RTGS)/[A-Z0-9]{1,3}/([A-Z0-9]{8,})"""),
+        Regex("""(?i)(?:NEFT|IMPS|RTGS)/([A-Z0-9]{10,})/"""),
+        Regex("""(?i)BIL\s*\*?\s*NEFT\s*\*?\s*([A-Z0-9]{4,})"""),
+        Regex("""(?i)(?:ref(?:erence)?\.?(?:\s*no\.?)?|txn(?:\s*id)?\.?|utr)[:\s#]*([A-Z0-9]{6,})"""),
+    )
 }
