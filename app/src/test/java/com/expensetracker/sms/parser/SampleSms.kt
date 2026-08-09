@@ -85,7 +85,7 @@ object SampleSms {
      * Axis compact UPI debit with amount *before* the verb ("INR X debited").
      * Must stay in the ledger (was dropped by the gate previously).
      */
-    const val AXIS_INR_DEBITED_UPI_P2A = """
+    val AXIS_INR_DEBITED_UPI_P2A = """
 INR 2500.00 debited
 A/c no. XX8291
 08-08-26, 14:46:26

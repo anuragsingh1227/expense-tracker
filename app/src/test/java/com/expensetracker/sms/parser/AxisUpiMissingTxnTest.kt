@@ -19,17 +19,9 @@ class AxisUpiMissingTxnTest {
     private val parser = SmsParser(zone = ZoneId.of("Asia/Kolkata"))
     private val fallback = Instant.parse("2026-08-08T09:16:26Z")
 
-    private val body = """
-INR 2500.00 debited
-A/c no. XX8291
-08-08-26, 14:46:26
-UPI/P2A/111991242206/LALAWMPUII
-Not you? SMS BLOCKUPI Cust ID to 919951860002
-Axis Bank
-""".trimIndent()
-
     @Test
     fun `Axis INR-amount-then-debited UPI P2A is kept in the ledger`() {
+        val body = SampleSms.AXIS_INR_DEBITED_UPI_P2A
         assertThat(TransactionGate.isTransactional(body)).isTrue()
 
         val tx = parser.parse(RawSms("VM-AXISBK", body, fallback))!!
