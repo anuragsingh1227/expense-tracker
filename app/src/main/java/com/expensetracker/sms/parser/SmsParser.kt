@@ -118,6 +118,8 @@ class SmsParser(
             upper.contains("UPI") || UPI_ID.containsMatchIn(body) -> PaymentMode.UPI
             upper.contains("CREDIT CARD") || upper.contains("CC ") -> PaymentMode.CARD_CREDIT
             upper.contains("DEBIT CARD") || upper.contains("DC ") -> PaymentMode.CARD_DEBIT
+            upper.contains("NACH") || upper.contains("ECS") || upper.contains("UMRN") ||
+                upper.contains("ACH DEBIT") -> PaymentMode.NET_BANKING
             upper.contains("NEFT") || upper.contains("IMPS") || upper.contains("RTGS") -> PaymentMode.NET_BANKING
             upper.contains("WALLET") -> PaymentMode.WALLET
             upper.contains("ATM") -> PaymentMode.CARD_DEBIT
@@ -127,6 +129,11 @@ class SmsParser(
 
     private fun extractMerchant(body: String): String? {
         MERCHANT_AT.find(body)?.let { match ->
+            val name = sanitizeMerchantCandidate(match.groupValues[1]) ?: return@let
+            if (isPlausibleMerchant(name)) return name
+        }
+        // "NACH debit towards SCRIPBOXWEALTHMANAGE for INR …"
+        MERCHANT_TOWARDS.find(body)?.let { match ->
             val name = sanitizeMerchantCandidate(match.groupValues[1]) ?: return@let
             if (isPlausibleMerchant(name)) return name
         }
@@ -225,7 +232,13 @@ class SmsParser(
                 Categories.INSURANCE
             upper.contains("MUTUAL FUND") || upper.contains("SIP") || upper.contains("ZERODHA") ||
                 upper.contains("GROWW") || upper.contains("PPF") || upper.contains("PUBLIC PROVIDENT") ||
-                upper.contains("NPS") || upper.contains("NATIONAL PENSION") ->
+                upper.contains("NPS") || upper.contains("NATIONAL PENSION") ||
+                upper.contains("SCRIPBOX") || upper.contains("WEALTHMANAGE") ||
+                upper.contains("WEALTH MANAGE") || upper.contains("FISDOM") ||
+                upper.contains("INDMONEY") || upper.contains("FUNDSINDIA") ||
+                // Mandate collect to an investment platform (NACH/ECS + wealth/MF keywords).
+                ((upper.contains("NACH") || upper.contains("ECS") || upper.contains("UMRN")) &&
+                    (upper.contains("WEALTH") || upper.contains("MUTUAL") || upper.contains("INVEST"))) ->
                 Categories.INVESTMENT
             upper.contains("RECHARGE") -> Categories.RECHARGE
             upper.contains("ELECTRICITY") || upper.contains("WATER BILL") || upper.contains("GAS BILL") ->
@@ -352,6 +365,8 @@ class SmsParser(
             Regex("""(?i)\bat\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|through|upi|ref|avl|bal|info|to\s+dispute)|\s*[.,;]|$)""")
         private val MERCHANT_TO =
             Regex("""(?i)\bto\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|through|upi|ref|avl|bal|info|to\s+dispute)|\s*[.,;]|$)""")
+        private val MERCHANT_TOWARDS =
+            Regex("""(?i)\btowards\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,48}?)(?=\s+(?:for|with|on|via|umrn|in\s+a|ref)|\s*[.,;]|$)""")
         private val DISPUTE_OR_HELPLINE =
             Regex("""(?i)\b(?:dispute|helpline|customer\s+care|toll\s*free)\b""")
         private val PHONE_HEAVY_MERCHANT =
@@ -366,6 +381,7 @@ class SmsParser(
             Regex("""(?i)\bUPI/(?:P2A|P2M|P2P)/[0-9]{6,}/([A-Z][A-Z0-9 .&'*_-]{1,40})""")
         private val REFERENCE_PATTERNS = listOf(
             Regex("""(?i)(?:ref(?:erence)?(?:\s*no)?\.?|txn(?:\s*id)?\.?|utr)[:\s#]*([A-Z0-9]{6,})"""),
+            Regex("""(?i)UMRN[:\s]*([A-Z0-9]{6,})"""),
             Regex("""(?i)UPI(?:\s*ref)?[:\s]*([0-9]{9,})"""),
             // Axis/ICICI compact UPI path: "UPI/P2A/111991242206/LALAWMPUII"
             Regex("""(?i)UPI/[A-Z0-9]+/([0-9]{9,})"""),

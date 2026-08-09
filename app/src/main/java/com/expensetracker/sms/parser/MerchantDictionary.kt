@@ -38,7 +38,12 @@ object MerchantDictionary {
         Entry("STARBUCKS", "Starbucks", Categories.FOOD),
         Entry("BURGER KING", "Burger King", Categories.FOOD),
 
-        // Investments / brokers / MF
+        // Investments / brokers / MF / wealth
+        Entry("SCRIPBOXWEALTHMANAGE", "Scripbox", Categories.INVESTMENT),
+        Entry("SCRIPBOX WEALTH", "Scripbox", Categories.INVESTMENT),
+        Entry("SCRIPBOX", "Scripbox", Categories.INVESTMENT),
+        Entry("WEALTHMANAGE", "Wealth Manager", Categories.INVESTMENT),
+        Entry("WEALTH MANAGE", "Wealth Manager", Categories.INVESTMENT),
         Entry("GROWW", "Groww", Categories.INVESTMENT),
         Entry("ZERODHA", "Zerodha", Categories.INVESTMENT),
         Entry("UPSTOX", "Upstox", Categories.INVESTMENT),
@@ -46,6 +51,11 @@ object MerchantDictionary {
         Entry("ANGELONE", "Angel One", Categories.INVESTMENT),
         Entry("ANGELBROKING", "Angel One", Categories.INVESTMENT),
         Entry("KUVERA", "Kuvera", Categories.INVESTMENT),
+        Entry("FISDOM", "Fisdom", Categories.INVESTMENT),
+        Entry("INDMONEY", "INDmoney", Categories.INVESTMENT),
+        Entry("IND MONEY", "INDmoney", Categories.INVESTMENT),
+        Entry("FUNDSINDIA", "FundsIndia", Categories.INVESTMENT),
+        Entry("FUNDS INDIA", "FundsIndia", Categories.INVESTMENT),
         Entry("COIN BY ZERODHA", "Coin", Categories.INVESTMENT),
         Entry("PAYTM MONEY", "Paytm Money", Categories.INVESTMENT),
         Entry("ETMONEY", "ET Money", Categories.INVESTMENT),

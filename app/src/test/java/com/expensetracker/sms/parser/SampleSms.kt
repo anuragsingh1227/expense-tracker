@@ -94,6 +94,10 @@ Not you? SMS BLOCKUPI Cust ID to 919951860002
 Axis Bank
 """.trimIndent()
 
+    /** NACH mandate to wealth/MF platform — Investment, not spend. */
+    const val AXIS_NACH_SCRIPBOX =
+        "NACH debit towards SCRIPBOXWEALTHMANAGE for INR 1,300.00 with UMRN UTIB7010806200000399 has been successfully processed in A/c no. XX8291 today - Axis Bank"
+
     /** Public DLT-style spend alert (SMS Gateway Center sample shape). */
     const val CARD_SPENT_JIO =
         "Alert: You've spent INR 555.00 on your bank card **9123 at BD JIO MONEY on 05/08/2026 at 11:07 IST."
