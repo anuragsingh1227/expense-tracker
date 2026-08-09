@@ -38,6 +38,15 @@ object MerchantDictionary {
         Entry("STARBUCKS", "Starbucks", Categories.FOOD),
         Entry("BURGER KING", "Burger King", Categories.FOOD),
 
+        // Loan EMI collectors (ACH/NACH) — before generic bank spend matches
+        Entry("HDFC BANK LTD", "HDFC Bank", Categories.EMI),
+        Entry("HDFC BANK LIMITED", "HDFC Bank", Categories.EMI),
+        Entry("BAJAJ FINANCE", "Bajaj Finance", Categories.EMI),
+        Entry("BAJAJ FINSERV", "Bajaj Finserv", Categories.EMI),
+        Entry("TATA CAPITAL", "Tata Capital", Categories.EMI),
+        Entry("HOME CREDIT", "Home Credit", Categories.EMI),
+        Entry("FULLERTON", "Fullerton", Categories.EMI),
+
         // Investments / brokers / MF / wealth
         Entry("SCRIPBOXWEALTHMANAGE", "Scripbox", Categories.INVESTMENT),
         Entry("SCRIPBOX WEALTH", "Scripbox", Categories.INVESTMENT),

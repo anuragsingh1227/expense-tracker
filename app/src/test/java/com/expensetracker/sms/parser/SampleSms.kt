@@ -269,5 +269,15 @@ UPI/P2A/781919319954/ANURAG SI/ICIC/Paym - Axis Bank
     /** Anonymous IMPS credit returning investment capital (pairs with Motilal debit). */
     const val ICICI_IMPS_MOBILE_CREDIT_40000 =
         "ICICI Bank Account XX293 is credited with Rs 40,000.00 on 01-Aug-26 by Account linked to mobile number XXXXX00000. IMPS Ref. no. 621321435842."
+
+    /** Axis compact ACH loan EMI collect (HDFC Bank mandate). */
+    val AXIS_ACH_DR_HDFC_EMI = """
+Debit INR 27136.00
+Axis Bank A/c XX8291
+05-08-26 09:40:02
+ACH-DR-HDFC BANK LTD-47138
+WhatsApp BAL to 917036165000
+Not You? SMS BLOCKALL CustID to 919951860002
+""".trimIndent()
 }
 

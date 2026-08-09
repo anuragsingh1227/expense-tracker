@@ -187,7 +187,8 @@ object TransactionGate {
         // no with/for/from/via connector.
         "DEBITED RS", "DEBITED INR", "DEBITED ₹",
         // Mandate / auto-collect: "NACH debit towards SCRIPBOX… for INR … processed"
-        "NACH DEBIT", "ECS DEBIT", "ACH DEBIT", "DEBIT TOWARDS",
+        // Axis compact: "ACH-DR-HDFC BANK LTD-47138"
+        "NACH DEBIT", "ECS DEBIT", "ACH DEBIT", "ACH-DR", "ACH/DR", "DEBIT TOWARDS",
     )
 
     /**

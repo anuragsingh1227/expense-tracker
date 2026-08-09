@@ -119,7 +119,9 @@ class SmsParser(
             upper.contains("CREDIT CARD") || upper.contains("CC ") -> PaymentMode.CARD_CREDIT
             upper.contains("DEBIT CARD") || upper.contains("DC ") -> PaymentMode.CARD_DEBIT
             upper.contains("NACH") || upper.contains("ECS") || upper.contains("UMRN") ||
-                upper.contains("ACH DEBIT") -> PaymentMode.NET_BANKING
+                upper.contains("ACH DEBIT") || upper.contains("ACH-DR") ||
+                upper.contains("ACH/DR") || upper.contains("ACH DR") ||
+                ACH_DR_LINE.containsMatchIn(body) -> PaymentMode.NET_BANKING
             upper.contains("NEFT") || upper.contains("IMPS") || upper.contains("RTGS") -> PaymentMode.NET_BANKING
             upper.contains("WALLET") -> PaymentMode.WALLET
             upper.contains("ATM") -> PaymentMode.CARD_DEBIT
@@ -155,6 +157,11 @@ class SmsParser(
         UPI_PATH_PAYEE.find(body)?.let { match ->
             val name = match.groupValues[1].trim().trimEnd('.', ',', '/')
             if (name.length >= 2 && isPlausibleMerchant(name)) return name
+        }
+        // Axis compact ACH: "ACH-DR-HDFC BANK LTD-47138"
+        ACH_DR_LINE.find(body)?.let { match ->
+            val name = sanitizeMerchantCandidate(match.groupValues[1]) ?: return@let
+            if (isPlausibleMerchant(name)) return name
         }
         return null
     }
@@ -234,7 +241,7 @@ class SmsParser(
             type == TransactionType.CREDIT && (upper.contains("SALARY") || upper.contains("SAL CR")) -> Categories.SALARY
             isSelfOrCardTransfer(upper) -> Categories.TRANSFER
             upper.contains("ATM") || upper.contains("CASH WDL") -> Categories.CASH_WITHDRAWAL
-            upper.contains("EMI") -> Categories.EMI
+            upper.contains("EMI") || isAchLoanEmi(upper) -> Categories.EMI
             upper.contains("RENT") -> Categories.RENT
             upper.contains("INSURANCE") || upper.contains("INS PREMIUM") || upper.contains("PREMIUM PAID") ->
                 Categories.INSURANCE
@@ -259,6 +266,22 @@ class SmsParser(
             type == TransactionType.CREDIT -> Categories.TRANSFER
             else -> Categories.OTHERS
         }
+    }
+
+    /**
+     * Axis/HDFC compact ACH loan collect: `ACH-DR-HDFC BANK LTD-47138`.
+     * Bank/NBFC collectors on ACH/NACH/ECS rails are EMI, not generic spend —
+     * unless the payee is clearly an investment platform (handled earlier).
+     */
+    private fun isAchLoanEmi(upper: String): Boolean {
+        val achRail = upper.contains("ACH-DR") || upper.contains("ACH/DR") ||
+            upper.contains("ACH DR") || upper.contains("ACH DEBIT") ||
+            upper.contains("NACH") || upper.contains("ECS") || upper.contains("UMRN") ||
+            ACH_DR_LINE.containsMatchIn(upper)
+        if (!achRail) return false
+        if (INVESTMENT_PAYEE_HINTS.any { upper.contains(it) }) return false
+        if (upper.contains("WEALTH") || upper.contains("MUTUAL") || upper.contains("INVEST")) return false
+        return LOAN_EMI_COLLECTOR_HINTS.any { upper.contains(it) }
     }
 
     /**
@@ -334,6 +357,11 @@ class SmsParser(
 
     private fun extractNarration(body: String): String? {
         INFO_PATTERN.find(body)?.let { return it.groupValues[1].trim() }
+        ACH_DR_LINE.find(body)?.let { match ->
+            val payee = match.groupValues[1].trim()
+            val ref = match.groupValues.getOrNull(2)?.takeIf { it.isNotBlank() }
+            return if (ref != null) "ACH-DR-$payee-$ref" else "ACH-DR-$payee"
+        }
         return null
     }
 
@@ -414,6 +442,18 @@ class SmsParser(
             // Compact UPI payee tokens often end with MF (MotilalOswalMF, AxisMF, …).
             "MF CREDITED",
         )
+        // Axis compact ACH debit line: "ACH-DR-HDFC BANK LTD-47138"
+        private val ACH_DR_LINE = Regex(
+            """(?im)^\s*ACH[-/ ]?DR[-/ ]([A-Z][A-Z0-9 .&']+?)(?:[-/ ](\d{3,}))?\s*$""",
+        )
+        private val LOAN_EMI_COLLECTOR_HINTS = listOf(
+            "HDFC BANK", "ICICI BANK", "AXIS BANK", "KOTAK", "STATE BANK", " SBI",
+            "BANK LTD", "BANK LIMITED", "BAJAJ FINANCE", "BAJAJ FINSERV",
+            "TATA CAPITAL", "FULLERTON", "HOME CREDIT", "IDFC", "INDUSIND",
+            "YES BANK", "RBL BANK", "FEDERAL BANK", "BANK OF BARODA", "PNB ",
+            "PUNJAB NATIONAL", "CANARA BANK", "UNION BANK", "LOAN", "FINANCE LTD",
+            "FINSERV", "HOME LOAN", "PERSONAL LOAN",
+        )
         private val REFERENCE_PATTERNS = listOf(
             // "IMPS Ref. no. 621321435842" / "Ref no. ABC" / "UPI Ref 123"
             Regex("""(?i)(?:ref(?:erence)?\.?(?:\s*no\.?)?|txn(?:\s*id)?\.?|utr)[:\s#]*([A-Z0-9]{6,})"""),
@@ -425,6 +465,8 @@ class SmsParser(
             Regex("""(?i)(?:NEFT|IMPS|RTGS)/[A-Z0-9]{1,3}/([A-Z0-9]{8,})"""),
             // Axis card-payment compact template: "CRD-PMNT-530562****0887"
             Regex("""(?i)CRD[- ]?PMNT[- ]?([A-Z0-9*]{6,})"""),
+            // Axis ACH compact: "ACH-DR-HDFC BANK LTD-47138" → mandate/loan id
+            Regex("""(?i)ACH[-/ ]?DR[-/ ][A-Z0-9 .&']+?[-/ ](\d{3,})\b"""),
         )
         private val BALANCE_PATTERN = Regex(
             """(?i)(?:avl\.?\s*bal|available\s*balance|bal(?:ance)?)[:\s]*(?:rs\.?|inr|₹)?\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)""",
