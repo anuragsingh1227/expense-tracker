@@ -69,9 +69,8 @@ fun DashboardScreen(
         state.spend.amount.signum() != 0 ||
         state.income.amount.signum() != 0 ||
         state.investments.amount.signum() != 0
-    val showMonthInsights = state.period == SpendPeriod.MONTH ||
-        state.period == SpendPeriod.LAST_MONTH ||
-        state.period == SpendPeriod.LAST_3_MONTHS
+    // Stack / MoM only when the user opts into the 3-month filter.
+    val showMonthInsights = state.period == SpendPeriod.LAST_3_MONTHS
 
     LazyColumn(
         modifier = Modifier
@@ -118,6 +117,11 @@ fun DashboardScreen(
             PeriodFilterRow(
                 selected = state.period,
                 onSelect = viewModel::setPeriod,
+                periods = listOf(
+                    SpendPeriod.MONTH,
+                    SpendPeriod.LAST_MONTH,
+                    SpendPeriod.LAST_3_MONTHS,
+                ),
             )
         }
 
@@ -159,10 +163,21 @@ fun DashboardScreen(
                             style = MaterialTheme.typography.displaySmall,
                             fontWeight = FontWeight.Bold,
                         )
+                        Spacer(Modifier.height(14.dp))
+                        Text(
+                            stringResource(R.string.period_investments),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            state.investments.maskableFormatInr(),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                         Spacer(Modifier.height(12.dp))
                         HeroMetricStrip(
                             income = state.income.maskableFormatInr(),
-                            invested = state.investments.maskableFormatInr(),
                             net = state.net.maskableFormatInr(),
                         )
                     }
@@ -260,7 +275,6 @@ fun DashboardScreen(
 @Composable
 private fun HeroMetricStrip(
     income: String,
-    invested: String,
     net: String,
 ) {
     Row(
@@ -270,11 +284,6 @@ private fun HeroMetricStrip(
         HeroMetricCell(
             label = stringResource(R.string.period_income),
             value = income,
-            modifier = Modifier.weight(1f),
-        )
-        HeroMetricCell(
-            label = stringResource(R.string.period_investments),
-            value = invested,
             modifier = Modifier.weight(1f),
         )
         HeroMetricCell(

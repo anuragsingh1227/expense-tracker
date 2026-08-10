@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import java.time.Clock
 import java.time.LocalDate
@@ -53,8 +54,11 @@ private data class PeriodCore(
 )
 
 private data class PeriodInsights(
-    val momChanges: List<CategoryMomChange>,
-    val stack: List<StackMonthColumn>,
+    val momChanges: List<CategoryMomChange> = emptyList(),
+    val stack: List<StackMonthColumn> = emptyList(),
+    val momCurrentLabel: String = "",
+    val momPreviousLabel: String = "",
+    val momPartial: Boolean = false,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -72,10 +76,9 @@ class DashboardViewModel @Inject constructor(
     ) { period, _ -> period }
         .flatMapLatest { period ->
             val window = DashboardRanges.forPeriod(period, clock)
-            val compare = DashboardRanges.monthCompareWindows(clock)
-            val stackWindow = DashboardRanges.lastThreeMonthsWindow(clock)
-            val monthKeys = DashboardRanges.monthKeysForLastThree(clock)
 
+            // Core totals always match the selected chip only — current month by default
+            // never pulls last-month / 3-month category scans in the background.
             val core = combine(
                 repository.observeSpendTotal(window.fromInclusive, window.toExclusive),
                 repository.observeIncomeTotal(window.fromInclusive, window.toExclusive),
@@ -92,21 +95,43 @@ class DashboardViewModel @Inject constructor(
                 )
             }
 
-            val insights = combine(
-                // Unbounded (in practice) so a category outside the display top-N never
-                // gets misread as "previous = 0" / falsely flagged "new" in MoM.
-                repository.observeCategorySpend(compare.currentFrom, compare.currentToExclusive, ALL_CATEGORIES_LIMIT),
-                repository.observeCategorySpend(compare.previousFrom, compare.previousToExclusive, ALL_CATEGORIES_LIMIT),
-                repository.observeCategoryMonthSpend(stackWindow.fromInclusive, stackWindow.toExclusive),
-            ) { currentCats, previousCats, monthRows: List<CategoryMonthSpend> ->
-                PeriodInsights(
-                    momChanges = SpendInsights.monthOverMonth(
-                        current = currentCats.associate { it.category to it.amount },
-                        previous = previousCats.associate { it.category to it.amount },
-                        limit = 5,
+            // Multi-month insights are opt-in via the "3 mo" filter (for longer app use).
+            val insights = if (period == SpendPeriod.LAST_3_MONTHS) {
+                val compare = DashboardRanges.monthCompareWindows(clock)
+                val stackWindow = DashboardRanges.lastThreeMonthsWindow(clock)
+                val monthKeys = DashboardRanges.monthKeysForLastThree(clock)
+                combine(
+                    // Unbounded (in practice) so a category outside the display top-N never
+                    // gets misread as "previous = 0" / falsely flagged "new" in MoM.
+                    repository.observeCategorySpend(
+                        compare.currentFrom,
+                        compare.currentToExclusive,
+                        ALL_CATEGORIES_LIMIT,
                     ),
-                    stack = SpendInsights.stackedMonths(monthRows, monthKeys, topCategories = 5),
-                )
+                    repository.observeCategorySpend(
+                        compare.previousFrom,
+                        compare.previousToExclusive,
+                        ALL_CATEGORIES_LIMIT,
+                    ),
+                    repository.observeCategoryMonthSpend(
+                        stackWindow.fromInclusive,
+                        stackWindow.toExclusive,
+                    ),
+                ) { currentCats, previousCats, monthRows: List<CategoryMonthSpend> ->
+                    PeriodInsights(
+                        momChanges = SpendInsights.monthOverMonth(
+                            current = currentCats.associate { it.category to it.amount },
+                            previous = previousCats.associate { it.category to it.amount },
+                            limit = 5,
+                        ),
+                        stack = SpendInsights.stackedMonths(monthRows, monthKeys, topCategories = 5),
+                        momCurrentLabel = compare.currentLabel,
+                        momPreviousLabel = compare.previousLabel,
+                        momPartial = compare.currentIsPartial,
+                    )
+                }
+            } else {
+                flowOf(PeriodInsights())
             }
 
             combine(core, insights) { c, i ->
@@ -119,9 +144,9 @@ class DashboardViewModel @Inject constructor(
                     categories = c.categories,
                     recent = c.recent,
                     momChanges = i.momChanges,
-                    momCurrentLabel = compare.currentLabel,
-                    momPreviousLabel = compare.previousLabel,
-                    momPartial = compare.currentIsPartial,
+                    momCurrentLabel = i.momCurrentLabel,
+                    momPreviousLabel = i.momPreviousLabel,
+                    momPartial = i.momPartial,
                     stack = i.stack,
                 )
             }

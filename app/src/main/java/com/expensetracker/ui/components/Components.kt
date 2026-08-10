@@ -202,21 +202,23 @@ fun PeriodFilterRow(
     selected: SpendPeriod,
     onSelect: (SpendPeriod) -> Unit,
     modifier: Modifier = Modifier,
+    periods: List<SpendPeriod> = SpendPeriod.entries,
 ) {
-    val periods = listOf(
+    val labels = mapOf(
         SpendPeriod.DAY to stringResource(R.string.period_day),
         SpendPeriod.WEEK to stringResource(R.string.period_week),
         SpendPeriod.MONTH to stringResource(R.string.period_month),
         SpendPeriod.LAST_MONTH to stringResource(R.string.period_last_month),
         SpendPeriod.LAST_3_MONTHS to stringResource(R.string.period_last_3_months),
     )
+    val periodChips = periods.map { it to (labels[it] ?: it.name) }
     Row(
         modifier = modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        periods.forEach { (period, label) ->
+        periodChips.forEach { (period, label) ->
             val selectedNow = period == selected
             val a11y = if (selectedNow) {
                 stringResource(R.string.period_selected_a11y, label)

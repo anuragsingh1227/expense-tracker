@@ -28,7 +28,7 @@
     <string name="period_spent_last_3_months">Spent last 3 months</string>
     <string name="period_spend_supporting">Income %1$s · Invested %2$s · Net %3$s</string>
     <string name="period_income">Income</string>
-    <string name="period_investments">Invested</string>
+    <string name="period_investments">Investment</string>
     <string name="period_net">Net cash</string>
     <string name="period_select_a11y">Show %1$s</string>
     <string name="period_selected_a11y">Showing %1$s</string>
@@ -48,7 +48,7 @@
     <string name="dashboard_empty_period_title">Quiet period</string>
     <string name="dashboard_empty_period_body">No spends in this range. Switch the period above, or open Activity to add one.</string>
     <string name="stack_title">Spend by month</string>
-    <string name="stack_subtitle">Top categories stacked for the last 3 months (on-device)</string>
+    <string name="stack_subtitle">Top categories stacked across the selected 3 months (on-device)</string>
     <string name="mom_title">Rising vs last month</string>
     <string name="mom_subtitle">%1$s compared with %2$s</string>
     <string name="mom_subtitle_partial">%1$s so far vs full %2$s</string>
