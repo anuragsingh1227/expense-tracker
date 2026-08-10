@@ -45,4 +45,26 @@ class SpendInsightsTest {
         assertThat(stack[0].total).isEqualTo(Money.ofRupees(1490))
         assertThat(stack[1].monthLabel).isEqualTo("Feb")
     }
+
+    @Test
+    fun `stackedMonths pads missing older months with zero totals`() {
+        // First-install shape: only the current month has spend rows.
+        val rows = listOf(
+            CategoryMonthSpend("Food", "2024-06", Money.ofRupees(1200)),
+            CategoryMonthSpend("Travel", "2024-06", Money.ofRupees(300)),
+        )
+        val stack = SpendInsights.stackedMonths(
+            rows = rows,
+            monthKeysOldestFirst = listOf("2024-04", "2024-05", "2024-06"),
+            topCategories = 5,
+        )
+        assertThat(stack).hasSize(3)
+        assertThat(stack.map { it.monthKey }).containsExactly("2024-04", "2024-05", "2024-06").inOrder()
+        assertThat(stack[0].total).isEqualTo(Money.ZERO)
+        assertThat(stack[0].segments).isEmpty()
+        assertThat(stack[1].total).isEqualTo(Money.ZERO)
+        assertThat(stack[1].segments).isEmpty()
+        assertThat(stack[2].total).isEqualTo(Money.ofRupees(1500))
+        assertThat(stack[2].segments).isNotEmpty()
+    }
 }

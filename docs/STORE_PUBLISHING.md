@@ -59,9 +59,71 @@ Upload the AAB in Play Console. Use the same keystore for all future updates.
 6. **Screenshots** — phone screenshots of Spends / Activity / More (paste import).
 7. **App access** — no login required.
 
-## Amazon / Galaxy / other stores
+## Amazon / other APK stores
 
-Upload `app-store-release.apk` or AAB if the store accepts it. Reuse the same signing key when possible. Link the same privacy policy.
+Upload `app-store-release.apk` (or AAB if accepted). Reuse the same signing key when possible. Link the same privacy policy.
+
+## Samsung Galaxy Store — Offline Expense Tracker (SMS APK)
+
+Galaxy Store (unlike Google Play) can accept SMS-reading finance apps when you
+disclose permissions and host a privacy policy. For Galaxy, submit the **`sms`** flavor.
+
+Full copy-paste listing text: [`GALAXY_STORE_SMS_LISTING.md`](GALAXY_STORE_SMS_LISTING.md).
+
+| Field | Value |
+|-------|--------|
+| Listing title | **Offline Expense Tracker** |
+| Package | `com.expensetracker.offline.sms` |
+| Flavor | `sms` |
+| Binary | `./gradlew :app:assembleSmsRelease` → `app-sms-release.apk` |
+| `targetSdk` | 34 |
+| Price | Free |
+| Category | Finance |
+
+### Seller account (one-time)
+
+1. [Samsung account](https://account.samsung.com/) → [Seller Portal](https://seller.samsungapps.com/)
+2. Apply for **commercial seller** status (required for free apps too)
+3. Docs: [Get started](https://developer.samsung.com/galaxy-store/prepare.html)
+
+### What reviewers expect for SMS
+
+- Privacy policy URL (host `docs/privacy-policy.html` on HTTPS)
+- App description lists **each SMS-related permission and why**
+- No more permissions than needed (`READ_SMS`, `RECEIVE_SMS`, `RECEIVE_BOOT_COMPLETED`, notifications, biometric)
+- Emphasize **on-device only / no internet permission**
+
+Suggested privacy URL after GitHub Pages:
+`https://anuragsingh1227.github.io/expense-tracker/privacy-policy.html`
+
+### Build (release-signed)
+
+```bash
+# keystore.properties + release.keystore required for a real store upload
+./gradlew :app:assembleSmsRelease
+```
+
+Do **not** upload a debug-signed APK. Keep the same keystore for all future updates of `com.expensetracker.offline.sms`.
+
+### Submit
+
+1. Seller Portal → Android app → Add new app
+2. Title: **Offline Expense Tracker**
+3. Upload `app-sms-release.apk`
+4. Paste short/full description + permissions table from `GALAXY_STORE_SMS_LISTING.md`
+5. Screenshots of Spends / Activity / SMS onboarding
+6. Countries: start with India → Submit
+
+### Do not confuse with Play
+
+| Store | Binary |
+|-------|--------|
+| **Galaxy Store** | SMS APK (`…offline.sms`) — this guide |
+| **Google Play** | Store AAB/APK (`…offline`) — no SMS permissions |
+
+### After approval
+
+Bump `versionCode`, rebuild SMS release, upload, resubmit.
 
 ## Security / size posture (store build)
 
@@ -73,5 +135,5 @@ Upload `app-store-release.apk` or AAB if the store accepts it. Reuse the same si
 
 ## Versioning
 
-- `versionName` `1.1.8`, `versionCode` `108` (bump `versionCode` on every store upload)
+- Bump `versionName` / `versionCode` in `app/build.gradle.kts` on every store upload (currently **1.1.22** / **122**)
 - Debug builds use `.debug` applicationId suffix so they can sit beside release installs

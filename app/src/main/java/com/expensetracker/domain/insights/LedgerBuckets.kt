@@ -8,6 +8,10 @@ import com.expensetracker.sms.parser.Categories
 /**
  * In-memory mirrors of [com.expensetracker.data.db.dao.TransactionDao] spend/income/
  * investment filters. Keep these identical to the SQL `NOT IN` / `=` clauses.
+ *
+ * Bucket rules implement [LedgerPolicy]: spend excludes transfers/investments;
+ * income excludes transfers/refunds; refunds net against spend; investment
+ * credits (redemptions) net against investment debits.
  */
 object LedgerBuckets {
 
@@ -19,10 +23,15 @@ object LedgerBuckets {
     fun isIncome(tx: Transaction): Boolean =
         tx.type == TransactionType.CREDIT &&
             tx.category != Categories.TRANSFER &&
-            tx.category != Categories.REFUND
+            tx.category != Categories.REFUND &&
+            tx.category != Categories.INVESTMENT
 
     fun isInvestment(tx: Transaction): Boolean =
         tx.type == TransactionType.DEBIT && tx.category == Categories.INVESTMENT
+
+    /** Redemption / returned investment capital — offsets [isInvestment]. */
+    fun isInvestmentReturn(tx: Transaction): Boolean =
+        tx.type == TransactionType.CREDIT && tx.category == Categories.INVESTMENT
 
     fun isTransfer(tx: Transaction): Boolean =
         tx.category == Categories.TRANSFER
@@ -45,6 +54,9 @@ object LedgerBuckets {
     fun income(txs: Iterable<Transaction>): Money =
         txs.filter(::isIncome).fold(Money.ZERO) { acc, tx -> acc + tx.amount }
 
-    fun investments(txs: Iterable<Transaction>): Money =
-        txs.filter(::isInvestment).fold(Money.ZERO) { acc, tx -> acc + tx.amount }
+    fun investments(txs: Iterable<Transaction>): Money {
+        val invested = txs.filter(::isInvestment).fold(Money.ZERO) { acc, tx -> acc + tx.amount }
+        val returned = txs.filter(::isInvestmentReturn).fold(Money.ZERO) { acc, tx -> acc + tx.amount }
+        return invested - returned
+    }
 }

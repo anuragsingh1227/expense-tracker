@@ -21,6 +21,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.time.Clock
 import java.time.LocalDate
@@ -38,6 +40,7 @@ data class DashboardState(
     val momCurrentLabel: String = "",
     val momPreviousLabel: String = "",
     val momPartial: Boolean = false,
+    /** Always three columns: current−2, current−1, current (zeros when no spend yet). */
     val stack: List<StackMonthColumn> = emptyList(),
 ) {
     /** Income − spend − investments (transfers ignored). */
@@ -52,9 +55,11 @@ private data class PeriodCore(
     val recent: List<Transaction>,
 )
 
-private data class PeriodInsights(
-    val momChanges: List<CategoryMomChange>,
-    val stack: List<StackMonthColumn>,
+private data class MomInsights(
+    val momChanges: List<CategoryMomChange> = emptyList(),
+    val momCurrentLabel: String = "",
+    val momPreviousLabel: String = "",
+    val momPartial: Boolean = false,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -72,10 +77,8 @@ class DashboardViewModel @Inject constructor(
     ) { period, _ -> period }
         .flatMapLatest { period ->
             val window = DashboardRanges.forPeriod(period, clock)
-            val compare = DashboardRanges.monthCompareWindows(clock)
-            val stackWindow = DashboardRanges.lastThreeMonthsWindow(clock)
-            val monthKeys = DashboardRanges.monthKeysForLastThree(clock)
 
+            // Hero / category / recent totals follow the selected chip only.
             val core = combine(
                 repository.observeSpendTotal(window.fromInclusive, window.toExclusive),
                 repository.observeIncomeTotal(window.fromInclusive, window.toExclusive),
@@ -92,24 +95,48 @@ class DashboardViewModel @Inject constructor(
                 )
             }
 
-            val insights = combine(
-                // Unbounded (in practice) so a category outside the display top-N never
-                // gets misread as "previous = 0" / falsely flagged "new" in MoM.
-                repository.observeCategorySpend(compare.currentFrom, compare.currentToExclusive, ALL_CATEGORIES_LIMIT),
-                repository.observeCategorySpend(compare.previousFrom, compare.previousToExclusive, ALL_CATEGORIES_LIMIT),
-                repository.observeCategoryMonthSpend(stackWindow.fromInclusive, stackWindow.toExclusive),
-            ) { currentCats, previousCats, monthRows: List<CategoryMonthSpend> ->
-                PeriodInsights(
-                    momChanges = SpendInsights.monthOverMonth(
-                        current = currentCats.associate { it.category to it.amount },
-                        previous = previousCats.associate { it.category to it.amount },
-                        limit = 5,
+            // Chart X-axis is permanently the rolling 3 calendar months. Missing months
+            // are padded to Money.ZERO so first-install (current month only) still draws
+            // three equal slots and fills progressively as local data accumulates.
+            val stackWindow = DashboardRanges.lastThreeMonthsWindow(clock)
+            val monthKeys = DashboardRanges.monthKeysForLastThree(clock)
+            val stackFlow = repository
+                .observeCategoryMonthSpend(stackWindow.fromInclusive, stackWindow.toExclusive)
+                .map { monthRows: List<CategoryMonthSpend> ->
+                    SpendInsights.stackedMonths(monthRows, monthKeys, topCategories = 5)
+                }
+
+            // MoM compare stays opt-in (needs a prior month of category totals).
+            val momFlow = if (period == SpendPeriod.LAST_3_MONTHS) {
+                val compare = DashboardRanges.monthCompareWindows(clock)
+                combine(
+                    repository.observeCategorySpend(
+                        compare.currentFrom,
+                        compare.currentToExclusive,
+                        ALL_CATEGORIES_LIMIT,
                     ),
-                    stack = SpendInsights.stackedMonths(monthRows, monthKeys, topCategories = 5),
-                )
+                    repository.observeCategorySpend(
+                        compare.previousFrom,
+                        compare.previousToExclusive,
+                        ALL_CATEGORIES_LIMIT,
+                    ),
+                ) { currentCats, previousCats ->
+                    MomInsights(
+                        momChanges = SpendInsights.monthOverMonth(
+                            current = currentCats.associate { it.category to it.amount },
+                            previous = previousCats.associate { it.category to it.amount },
+                            limit = 5,
+                        ),
+                        momCurrentLabel = compare.currentLabel,
+                        momPreviousLabel = compare.previousLabel,
+                        momPartial = compare.currentIsPartial,
+                    )
+                }
+            } else {
+                flowOf(MomInsights())
             }
 
-            combine(core, insights) { c, i ->
+            combine(core, stackFlow, momFlow) { c, stack, mom ->
                 DashboardState(
                     period = period,
                     rangeLabel = window.labelRange,
@@ -118,11 +145,11 @@ class DashboardViewModel @Inject constructor(
                     investments = c.investments,
                     categories = c.categories,
                     recent = c.recent,
-                    momChanges = i.momChanges,
-                    momCurrentLabel = compare.currentLabel,
-                    momPreviousLabel = compare.previousLabel,
-                    momPartial = compare.currentIsPartial,
-                    stack = i.stack,
+                    momChanges = mom.momChanges,
+                    momCurrentLabel = mom.momCurrentLabel,
+                    momPreviousLabel = mom.momPreviousLabel,
+                    momPartial = mom.momPartial,
+                    stack = stack,
                 )
             }
         }

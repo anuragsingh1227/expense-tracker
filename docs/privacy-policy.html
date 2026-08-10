@@ -25,8 +25,9 @@
   </ul>
 
   <h2>SMS</h2>
-  <p><strong>Store / Play build:</strong> the App does <em>not</em> request <code>READ_SMS</code> or <code>RECEIVE_SMS</code>. You may paste message text or share text into the App.</p>
-  <p><strong>Optional SMS sideload build:</strong> if you install the SMS-enabled APK from outside Google Play, the App may request SMS permissions solely to parse banking/UPI messages on-device. Those messages never leave the device through the App.</p>
+  <p><strong>Store / Play build</strong> (<code>com.expensetracker.offline</code>): the App does <em>not</em> request <code>READ_SMS</code> or <code>RECEIVE_SMS</code>. You may paste message text or share text into the App.</p>
+  <p><strong>SMS / Galaxy Store build</strong> (<code>com.expensetracker.offline.sms</code>, listed as Offline Expense Tracker): the App may request <code>READ_SMS</code>, <code>RECEIVE_SMS</code>, and <code>RECEIVE_BOOT_COMPLETED</code> solely to import banking and UPI payment alerts into a local ledger. SMS content is parsed and stored <strong>only on your device</strong>. The App has no internet permission, so message text cannot be uploaded by the App.</p>
+  <p>Permissions are optional to grant; without them you can still add expenses manually or paste message text.</p>
 
   <h2>Backups</h2>
   <p>Backups are JSON files you choose to create or restore. Treat them as sensitive (they may include original SMS text). Device auto-backup of the App database is disabled.</p>

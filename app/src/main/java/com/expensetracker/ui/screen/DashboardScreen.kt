@@ -34,7 +34,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.expensetracker.R
 import com.expensetracker.ui.components.CategoryBreakdown
 import com.expensetracker.ui.components.EmptyState
-import com.expensetracker.ui.components.MetricTile
 import com.expensetracker.ui.components.MomRisingList
 import com.expensetracker.ui.components.PeriodFilterRow
 import com.expensetracker.ui.components.SectionLabel
@@ -66,6 +65,13 @@ fun DashboardScreen(
         SpendPeriod.LAST_MONTH -> stringResource(R.string.period_spent_last_month)
         SpendPeriod.LAST_3_MONTHS -> stringResource(R.string.period_spent_last_3_months)
     }
+    val hasLedgerActivity = state.recent.isNotEmpty() ||
+        state.spend.amount.signum() != 0 ||
+        state.income.amount.signum() != 0 ||
+        state.investments.amount.signum() != 0
+    // Stacked chart always uses a fixed 3-month axis (padded zeros for empty months).
+    // MoM rising list stays on the longer-range chip.
+    val showMomInsights = state.period == SpendPeriod.LAST_3_MONTHS
 
     LazyColumn(
         modifier = Modifier
@@ -80,7 +86,7 @@ fun DashboardScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         stringResource(R.string.home_greeting),
                         style = MaterialTheme.typography.labelLarge,
@@ -112,149 +118,15 @@ fun DashboardScreen(
             PeriodFilterRow(
                 selected = state.period,
                 onSelect = viewModel::setPeriod,
+                periods = listOf(
+                    SpendPeriod.MONTH,
+                    SpendPeriod.LAST_MONTH,
+                    SpendPeriod.LAST_3_MONTHS,
+                ),
             )
         }
 
-        item {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Column(modifier = Modifier.padding(22.dp)) {
-                    Text(
-                        spendLabel,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
-                    )
-                    if (state.rangeLabel.isNotBlank()) {
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            state.rangeLabel,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f),
-                        )
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        state.spend.maskableFormatInr(),
-                        style = MaterialTheme.typography.displaySmall,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        stringResource(
-                            R.string.period_spend_supporting,
-                            state.income.maskableFormatInr(),
-                            state.investments.maskableFormatInr(),
-                            state.net.maskableFormatInr(),
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f),
-                    )
-                }
-            }
-        }
-
-        item {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                MetricTile(
-                    label = stringResource(R.string.period_income),
-                    amount = state.income,
-                    emphasize = true,
-                    modifier = Modifier.weight(1f),
-                )
-                MetricTile(
-                    label = stringResource(R.string.period_investments),
-                    amount = state.investments,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
-
-        item {
-            MetricTile(
-                label = stringResource(R.string.period_net),
-                amount = state.net,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-
-        if (state.stack.any { it.total.amount.signum() > 0 }) {
-            item {
-                SurfaceCard {
-                    Text(
-                        stringResource(R.string.stack_title),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        stringResource(R.string.stack_subtitle),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    StackedMonthBars(columns = state.stack)
-                }
-            }
-        }
-
-        if (state.momChanges.isNotEmpty()) {
-            item {
-                SurfaceCard {
-                    Text(
-                        stringResource(R.string.mom_title),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        if (state.momPartial) {
-                            stringResource(
-                                R.string.mom_subtitle_partial,
-                                state.momCurrentLabel,
-                                state.momPreviousLabel,
-                            )
-                        } else {
-                            stringResource(
-                                R.string.mom_subtitle,
-                                state.momCurrentLabel,
-                                state.momPreviousLabel,
-                            )
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    MomRisingList(changes = state.momChanges)
-                }
-            }
-        }
-
-        if (state.categories.isNotEmpty()) {
-            item {
-                SurfaceCard {
-                    Text(
-                        stringResource(R.string.where_money_went),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    CategoryBreakdown(
-                        categories = state.categories,
-                        totalSpend = state.spend,
-                    )
-                }
-            }
-        }
-
-        item {
-            SectionLabel(stringResource(R.string.recent_activity))
-        }
-
-        if (state.recent.isEmpty()) {
+        if (!hasLedgerActivity) {
             item {
                 EmptyState(
                     icon = Icons.AutoMirrored.Outlined.ReceiptLong,
@@ -265,10 +137,184 @@ fun DashboardScreen(
                 )
             }
         } else {
-            items(state.recent, key = { it.id }) { tx ->
-                TransactionListItem(tx, onClick = { onOpenTransaction(tx.id) })
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ) {
+                    Column(modifier = Modifier.padding(22.dp)) {
+                        Text(
+                            spendLabel,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
+                        )
+                        if (state.rangeLabel.isNotBlank()) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                state.rangeLabel,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f),
+                            )
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            state.spend.maskableFormatInr(),
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Spacer(Modifier.height(14.dp))
+                        Text(
+                            stringResource(R.string.period_investments),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            state.investments.maskableFormatInr(),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        HeroMetricStrip(
+                            income = state.income.maskableFormatInr(),
+                            net = state.net.maskableFormatInr(),
+                        )
+                    }
+                }
+            }
+
+            if (state.stack.size == 3) {
+                item {
+                    SurfaceCard {
+                        Text(
+                            stringResource(R.string.stack_title),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            stringResource(R.string.stack_subtitle),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(14.dp))
+                        StackedMonthBars(columns = state.stack)
+                    }
+                }
+            }
+
+            if (showMomInsights && state.momChanges.isNotEmpty()) {
+                item {
+                    SurfaceCard {
+                        Text(
+                            stringResource(R.string.mom_title),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            if (state.momPartial) {
+                                stringResource(
+                                    R.string.mom_subtitle_partial,
+                                    state.momCurrentLabel,
+                                    state.momPreviousLabel,
+                                )
+                            } else {
+                                stringResource(
+                                    R.string.mom_subtitle,
+                                    state.momCurrentLabel,
+                                    state.momPreviousLabel,
+                                )
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(14.dp))
+                        MomRisingList(changes = state.momChanges)
+                    }
+                }
+            }
+
+            if (state.categories.isNotEmpty()) {
+                item {
+                    SurfaceCard {
+                        Text(
+                            stringResource(R.string.where_money_went),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Spacer(Modifier.height(14.dp))
+                        CategoryBreakdown(
+                            categories = state.categories,
+                            totalSpend = state.spend,
+                        )
+                    }
+                }
+            }
+
+            item {
+                SectionLabel(stringResource(R.string.recent_activity))
+            }
+
+            if (state.recent.isEmpty()) {
+                item {
+                    EmptyState(
+                        icon = Icons.AutoMirrored.Outlined.ReceiptLong,
+                        title = stringResource(R.string.dashboard_empty_period_title),
+                        body = stringResource(R.string.dashboard_empty_period_body),
+                    )
+                }
+            } else {
+                items(state.recent, key = { it.id }) { tx ->
+                    TransactionListItem(tx, onClick = { onOpenTransaction(tx.id) })
+                }
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+@Composable
+private fun HeroMetricStrip(
+    income: String,
+    net: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        HeroMetricCell(
+            label = stringResource(R.string.period_income),
+            value = income,
+            modifier = Modifier.weight(1f),
+        )
+        HeroMetricCell(
+            label = stringResource(R.string.period_net),
+            value = net,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun HeroMetricCell(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f),
+            maxLines = 1,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            value,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onPrimary,
+            maxLines = 1,
+        )
     }
 }

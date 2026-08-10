@@ -202,21 +202,23 @@ fun PeriodFilterRow(
     selected: SpendPeriod,
     onSelect: (SpendPeriod) -> Unit,
     modifier: Modifier = Modifier,
+    periods: List<SpendPeriod> = SpendPeriod.entries,
 ) {
-    val periods = listOf(
+    val labels = mapOf(
         SpendPeriod.DAY to stringResource(R.string.period_day),
         SpendPeriod.WEEK to stringResource(R.string.period_week),
         SpendPeriod.MONTH to stringResource(R.string.period_month),
         SpendPeriod.LAST_MONTH to stringResource(R.string.period_last_month),
         SpendPeriod.LAST_3_MONTHS to stringResource(R.string.period_last_3_months),
     )
+    val periodChips = periods.map { it to (labels[it] ?: it.name) }
     Row(
         modifier = modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        periods.forEach { (period, label) ->
+        periodChips.forEach { (period, label) ->
             val selectedNow = period == selected
             val a11y = if (selectedNow) {
                 stringResource(R.string.period_selected_a11y, label)
@@ -247,7 +249,7 @@ fun PeriodFilterRow(
             ) {
                 Text(
                     label,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = if (selectedNow) FontWeight.Bold else FontWeight.Medium,
                 )
@@ -318,9 +320,11 @@ fun TransactionListItem(
 ) {
     val isCredit = tx.type == TransactionType.CREDIT
     val sign = if (isCredit) "+" else "−"
-    val amountColor = if (isCredit) ExpenseColors.Income else MaterialTheme.colorScheme.onSurface
+    val amountColor = if (isCredit) ExpenseColors.Income else ExpenseColors.Coral
     val date = tx.timestamp.atZone(ZoneId.systemDefault()).format(TX_FMT)
     val title = tx.merchant ?: tx.category
+    val bankBit = tx.bank?.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+    val meta = "${tx.category}$bankBit · $date"
     val a11y = "$title, $sign${tx.amount.maskableFormatInr()}, ${tx.category}, $date"
 
     Row(
@@ -386,7 +390,7 @@ fun TransactionListItem(
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                "${tx.category} · $date",
+                meta,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -394,19 +398,12 @@ fun TransactionListItem(
             )
         }
         Spacer(Modifier.width(8.dp))
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                "$sign${tx.amount.maskableFormatInr()}",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = amountColor,
-            )
-            Text(
-                stringResource(if (isCredit) R.string.type_credit else R.string.type_debit),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        Text(
+            "$sign${tx.amount.maskableFormatInr()}",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = amountColor,
+        )
     }
 }
 
@@ -609,10 +606,15 @@ fun StackedMonthBars(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(6.dp))
+                    val hasSpend = col.total.amount.signum() > 0
                     val heightFraction = (col.total.amount.toDouble() / maxTotal).toFloat().coerceIn(0f, 1f)
-                    val barHeight = (88f * heightFraction).coerceAtLeast(
-                        if (col.total.amount.signum() > 0) 3f else 0f,
-                    )
+                    // Empty months keep a short placeholder so the fixed 3-slot axis
+                    // never collapses or stretches the single populated month.
+                    val barHeight = if (hasSpend) {
+                        (88f * heightFraction).coerceAtLeast(3f)
+                    } else {
+                        6f
+                    }
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -624,7 +626,13 @@ fun StackedMonthBars(
                                 .fillMaxWidth()
                                 .height(barHeight.dp)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                                .background(
+                                    if (hasSpend) {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                                    },
+                                ),
                             verticalArrangement = Arrangement.Bottom,
                         ) {
                             col.segments.asReversed().forEach { seg ->

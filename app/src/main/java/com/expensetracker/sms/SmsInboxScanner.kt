@@ -6,7 +6,8 @@ import com.expensetracker.data.db.entity.SettingsEntity
 import com.expensetracker.data.repository.TransactionRepository
 import com.expensetracker.sms.parser.SmsParser
 import java.time.Clock
-import java.util.concurrent.TimeUnit
+import java.time.Instant
+import java.time.YearMonth
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -22,8 +23,9 @@ data class SmsScanResult(
  * Reads historical / recent SMS from the inbox, parses transactional ones,
  * and inserts them with the same dedupe path as [SmsReceiver].
  *
- * First run looks back [INITIAL_LOOKBACK_DAYS]; later runs are incremental
- * from the last watermark. Pass [forceFullLookback] from Settings to rescan.
+ * First install (and force rescan) imports only the **current calendar month**.
+ * Later runs are incremental from the last watermark so the on-device ledger
+ * fills progressively as new months accumulate.
  */
 @Singleton
 class SmsInboxScanner @Inject constructor(
@@ -78,15 +80,18 @@ class SmsInboxScanner @Inject constructor(
     }
 
     private suspend fun resolveSince(nowMillis: Long, forceFullLookback: Boolean): Long {
-        val lookback = nowMillis - TimeUnit.DAYS.toMillis(INITIAL_LOOKBACK_DAYS)
-        if (forceFullLookback) return lookback
+        val monthStart = startOfCurrentMonthMillis(nowMillis)
+        if (forceFullLookback) return monthStart
         val backfillDone = settingsDao.get(AppSettings.INITIAL_BACKFILL_DONE) == "true"
-        if (!backfillDone) return lookback
+        if (!backfillDone) return monthStart
         val watermark = settingsDao.get(AppSettings.LAST_SMS_SCAN_MILLIS)?.toLongOrNull()
-        return watermark ?: lookback
+        return watermark ?: monthStart
     }
 
-    companion object {
-        const val INITIAL_LOOKBACK_DAYS = 90L
+    /** Inclusive lower bound for first-install / force rescan: 00:00 local on the 1st. */
+    internal fun startOfCurrentMonthMillis(nowMillis: Long = clock.millis()): Long {
+        val zone = clock.zone
+        val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
+        return YearMonth.from(today).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
     }
 }

@@ -2,6 +2,11 @@ package com.expensetracker.sms.parser
 
 /**
  * Rejects OTPs, marketing, loan offers, and other non-ledger SMS before parsing.
+ *
+ * Ledger rule (see [com.expensetracker.domain.insights.LedgerPolicy]): only bank/card
+ * account *movements* become rows. Acknowledgements from card issuers, merchants, or
+ * other third parties ("we received your payment…") are not ledger facts — they
+ * duplicate the source account's own debit/credit SMS.
  */
 object TransactionGate {
 
@@ -81,13 +86,154 @@ object TransactionGate {
         Regex("""\bACCOUNT\s+.*\bOPENED\s+SUCCESSFULLY\b""", RegexOption.IGNORE_CASE),
         Regex("""\bHAS\s+BEEN\s+DELIVERED\b""", RegexOption.IGNORE_CASE),
         Regex("""\bOVERDRAFT\s+FACILITY\s+HAS\s+BEEN\s+SANCTIONED\b""", RegexOption.IGNORE_CASE),
-        // Card-side "thank you for your payment ... towards ... Credit Card ... through
-        // Auto Debit" confirmation duplicates the source account's own debit SMS —
-        // keep only the bank-side debit as the ledger record.
+        // --- Third-party / card-issuer payment acknowledgements (not ledger movements) ---
+        // "Thank you for your payment …" (any card/issuer/merchant ack). Distinct from
+        // spend alerts "Thank you for using … Credit Card … at MERCHANT".
+        Regex("""\bTHANK\s+YOU\s+FOR\s+(?:YOUR\s+)?PAYMENT\b""", RegexOption.IGNORE_CASE),
+        // "We have received your payment…" / "We've received payment of…" from
+        // card issuers, billers, or merchants — duplicates the bank debit SMS.
+        Regex("""\bWE(?:['’]VE|\s+HAVE)\s+RECEIVED\s+(?:YOUR\s+)?PAYMENT\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bRECEIVED\s+(?:YOUR\s+)?PAYMENT\s+(?:OF|FROM|TOWARDS|FOR|AGAINST)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bPAYMENT\s+(?:HAS\s+BEEN\s+|WAS\s+)?RECEIVED\s+(?:OF|FROM|TOWARDS|FOR|AGAINST|SUCCESSFULLY)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bPAYMENT\s+RECEIVED\s+SUCCESSFULLY\b""", RegexOption.IGNORE_CASE),
+        // "Payment of Rs X received successfully" (words between amount and verb).
+        Regex("""\bPAYMENT\b.{0,48}\bRECEIVED\s+SUCCESSFULLY\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bSUCCESSFULLY\s+RECEIVED\s+(?:YOUR\s+)?PAYMENT\b""", RegexOption.IGNORE_CASE),
+        // Card-side bill-payment posting: "Payment of Rs X was credited to your card…"
+        // — the savings/current debit SMS is the single ledger row to keep.
         Regex(
-            """(?=.*\bTHANK\s+YOU\s+FOR\s+YOUR\s+PAYMENT\b)(?=.*\bCREDIT\s+CARD\b)(?=.*\bAUTO\s+DEBIT\b)""",
+            """\bPAYMENT\b.{0,80}\bCREDITED\s+TO\s+YOUR\s+(?:CREDIT\s+)?CARD\b""",
             RegexOption.IGNORE_CASE,
         ),
+        Regex(
+            """\bCREDITED\s+TO\s+YOUR\s+(?:CREDIT\s+)?CARD\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex("""\bPAYMENT\b.{0,48}\bRECEIVED\s+AGAINST\b""", RegexOption.IGNORE_CASE),
+        // Investment contribution acknowledgements (PPF/NPS/SIP) — not expenses.
+        // Real SI/"credited in PPF"/savings debits are kept and booked as Investment.
+        Regex(
+            """\bWE\s+(?:HAVE\s+)?RECEIVED\s+(?:YOUR\s+)?(?:CONTRIBUTION|TRANSACTION)\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex("""\bCONTRIBUTION\s+(?:HAS\s+BEEN\s+|WAS\s+)?RECEIVED\b""", RegexOption.IGNORE_CASE),
+        Regex(
+            """\b(?:SIP|NPS|PPF|PROVIDENT)\b.{0,48}\bCONTRIBUTION\b.{0,48}\bRECEIVED\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bRECEIVED\b.{0,48}\b(?:SIP|NPS|PPF|PROVIDENT)\b.{0,48}\bCONTRIBUTION\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bRECEIVED\s+IN\s+YOUR\s+(?:PPF|NPS|PUBLIC\s+PROVIDENT)\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        // Broker/app "refund has been initiated… may take N working days" — not a bank
+        // movement. The savings/current credit SMS is the single ledger fact to keep.
+        Regex(
+            """\bREFUND\b.{0,80}\b(?:HAS\s+BEEN\s+|WAS\s+|IS\s+)?INITIATED\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\b(?:HAS\s+BEEN\s+|WAS\s+|IS\s+)?INITIATED\b.{0,80}\bREFUND\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bMAY\s+TAKE\s+\d+\s*[-–]\s*\d+\s+WORKING\s+DAYS\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bREFUND\b.{0,60}\bAGAINST\s+YOUR\s+INVESTMENT\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        // Outward transfer delivery ack: "Your NEFT txn … is credited to beneficiary …".
+        // The savings debit SMS is the single ledger row; this only confirms the other side.
+        Regex(
+            """\bCREDITED\s+TO\s+(?:THE\s+)?BENEFICIARY\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\b(?:NEFT|IMPS|RTGS|UPI)\s+TXN\b.{0,120}\bCREDITED\s+TO\s+BENEFICIARY\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bSUCCESSFULLY\s+CREDITED\s+TO\s+(?:THE\s+)?BENEFICIARY\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        // Broker app status — not a bank movement (bank ACH/NACH/UPI is the fact).
+        Regex(
+            """\bWITHDRAWAL\s+(?:INSTRUCTION|REQUEST)\b.{0,80}\b(?:PROCESSED|PLACED|SUBMITTED)\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\b(?:PLACED|SUBMITTED)\s+A\s+WITHDRAWAL\s+REQUEST\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bYOUR\s+WITHDRAWAL\s+INSTRUCTION\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        // AMC/fund-house SIP purchase confirmations (Folio/NAV) — bank NACH is the ledger row.
+        Regex(
+            """\bYOUR\s+SIP\s+PURCHASE\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bDEAR\s+INVESTOR\b.{0,120}\b(?:SIP|FOLIO|NAV)\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        // Merchant "we have received online payment" (wording between received and payment).
+        Regex(
+            """\bWE(?:['’]VE|\s+HAVE)\s+RECEIVED\s+ONLINE\s+PAYMENT\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bRECEIVED\s+ONLINE\s+PAYMENT\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bTHANK\s+YOU\.\s*[A-Z0-9 ._-]+\.com\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        // Failed mandate — money never left (or was bounced). Not a ledger debit.
+        // "NACH debit … has been returned today" (distinct from "successfully processed").
+        Regex(
+            """\b(?:NACH|ECS|ACH)\b.{0,120}\bHAS\s+BEEN\s+RETURNED\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\b(?:NACH|ECS|ACH)\b.{0,120}\b(?:WAS\s+)?RETURNED\s+TODAY\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bMANDATE\b.{0,80}\b(?:HAS\s+BEEN\s+)?RETURNED\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        // Card EMI conversion status — original spend SMS is the ledger row.
+        Regex(
+            """\b(?:HAS\s+BEEN\s+|WAS\s+)?CONVERTED\s+TO\s+EMI\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+        Regex(
+            """\bEMI\s+OF\b.{0,48}\bSTARTS?\s+FROM\b""",
+            RegexOption.IGNORE_CASE,
+        ),
+    )
+
+    private val PAYMENT_TOWARDS_CARD = Regex(
+        """\bPAYMENT\s+(?:OF|TOWARDS|FOR|AGAINST|TO)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val CREDIT_OR_YOUR_CARD = Regex(
+        """\b(?:CREDIT\s+CARD|YOUR\s+CARD)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+    /** Verbs that prove a real account/card money movement (keep as ledger). */
+    private val MOVEMENT_VERBS = listOf(
+        "DEBITED", "SPENT", "WITHDRAWN", "WITHDRAWAL", "PURCHASE",
+        "USED FOR", "HAS BEEN USED", "IS USED FOR", "WAS USED FOR",
+        "DEBIT INR", "DEBIT RS", "DEBIT ₹",
     )
 
     /**
@@ -112,16 +258,44 @@ object TransactionGate {
         // ICICI "Acc XX293 debited Rs. X on DATE Info..." — bare "debited" + amount,
         // no with/for/from/via connector.
         "DEBITED RS", "DEBITED INR", "DEBITED ₹",
+        // SBI: "A/c XX9876 debited by INR 350.00 …"
+        "DEBITED BY",
+        // SBI UPI: "Rs.450.00 transferred from A/c … to MERCHANT"
+        "TRANSFERRED FROM",
+        // Mandate / auto-collect: "NACH debit towards SCRIPBOX… for INR … processed"
+        // Axis compact: "ACH-DR-HDFC BANK LTD-47138"
+        "NACH DEBIT", "ECS DEBIT", "ACH DEBIT", "ACH-DR", "ACH/DR", "DEBIT TOWARDS",
+    )
+
+    /**
+     * Axis (and some other banks) put the currency *before* the verb:
+     * "INR 2500.00 debited\nA/c no. XX8291\n…\nUPI/P2A/…".
+     * That fails the "DEBITED INR" / "DEBITED FROM" substring checks above.
+     */
+    private val AMOUNT_THEN_DEBITED = Regex(
+        """(?i)(?:rs\.?|inr|₹)\s*[0-9,]+\.?\d*\s+debited\b""",
+    )
+    private val AMOUNT_THEN_TRANSFERRED = Regex(
+        """(?i)(?:rs\.?|inr|₹)\s*[0-9,]+\.?\d*\s+transferred\b""",
+    )
+    private val AMOUNT_THEN_CREDITED = Regex(
+        """(?i)(?:rs\.?|inr|₹)\s*[0-9,]+\.?\d*\s+credited\b""",
     )
     private val STRONG_CREDIT = listOf(
         "HAS BEEN CREDITED", "BEEN CREDITED", "CREDITED WITH", "CREDITED TO", "CREDITED",
-        "RECEIVED FROM", "RECEIVED RS", "DEPOSITED", "CR AMT", "CR/",
+        // "RECEIVED FROM" is OK here: third-party "received *payment* from …" acks are
+        // rejected earlier by the SPAM patterns above.
+        "RECEIVED FROM", "RECEIVED RS", "RECEIVED INR", "RECEIVED ₹", "DEPOSITED", "CR AMT", "CR/",
         // Refund / reversal SMS often skip "credited" entirely.
         "REFUNDED", "REFUND OF", "HAS BEEN REVERSED", "BEEN REVERSED", "REVERSED TO", "REVERSAL OF",
         // IDFC-style "Rs X received in your Account … from <vpa>" templates.
         "RECEIVED IN YOUR", "RECEIVED IN A/C", "RECEIVED IN ACCOUNT", "YOU HAVE RECEIVED",
         // Axis compact multi-line template: "Credit INR 5000.00\nAxis Bank A/c XX…"
         "CREDIT INR", "CREDIT RS", "CREDIT ₹",
+        // Cheque / cash inflows without the word "credited".
+        // Prefer CHEQUE_CLEARED / CASH_DEPOSIT regexes below for phrasing variants;
+        // keep only unambiguous substrings here.
+        "HAS BEEN CLEARED", "BEEN CLEARED", "CASH DEPOSIT", "DEPOSIT OF",
     )
 
     fun isTransactional(body: String): Boolean {
@@ -130,10 +304,72 @@ object TransactionGate {
         val upper = trimmed.uppercase()
         if (OTP.containsMatchIn(upper)) return false
         if (SPAM.any { it.containsMatchIn(trimmed) }) return false
+        // Issuer/biller "payment … towards your Credit Card" with no debit/spend verb —
+        // checked in code (not a search-position lookahead) so real BillPay debits stay.
+        if (isCardPaymentAckWithoutMovement(trimmed, upper)) return false
+        // PPF/NPS/SIP "contribution received / thank you" acks without an SI/debit posting.
+        if (isInvestmentContributionAck(upper)) return false
         if (!SmsAmountExtractor.AMOUNT_PATTERN.containsMatchIn(trimmed)) return false
-        val debit = STRONG_DEBIT.any { upper.contains(it) }
-        val credit = STRONG_CREDIT.any { upper.contains(it) }
+        val debit = STRONG_DEBIT.any { upper.contains(it) } ||
+            AMOUNT_THEN_DEBITED.containsMatchIn(trimmed) ||
+            AMOUNT_THEN_TRANSFERRED.containsMatchIn(trimmed)
+        val credit = STRONG_CREDIT.any { upper.contains(it) } ||
+            AMOUNT_THEN_CREDITED.containsMatchIn(trimmed) ||
+            CASH_DEPOSIT.containsMatchIn(trimmed) ||
+            CHEQUE_CLEARED.containsMatchIn(trimmed)
         return debit || credit
+    }
+
+    private val CASH_DEPOSIT = Regex(
+        """(?i)\bcash\s+deposit\b.{0,40}(?:rs\.?|inr|₹)""",
+    )
+    private val CHEQUE_CLEARED = Regex(
+        """(?i)\bcheque\b.{0,80}\b(?:has\s+been\s+|was\s+)?cleared\b""",
+    )
+
+    /**
+     * Investment vehicle thank-you / contribution-received SMS. Standing-instruction
+     * and "credited in PPF" postings are real deposits and must stay for Investment booking.
+     */
+    private fun isInvestmentContributionAck(upper: String): Boolean {
+        val vehicle = upper.contains("PPF") ||
+            upper.contains("PUBLIC PROVIDENT") ||
+            upper.contains("NPS") ||
+            upper.contains("NATIONAL PENSION") ||
+            upper.contains("SIP")
+        if (!vehicle) return false
+        // Authoritative deposit postings — keep for the parser to book as Investment.
+        if (upper.contains("SI TRANSACTION") ||
+            upper.contains("STANDING INSTRUCTION") ||
+            upper.contains("DEBITED") ||
+            upper.contains("DEDUCTION") ||
+            upper.contains("CREDITED IN PPF") ||
+            upper.contains("CREDITED TO PPF") ||
+            upper.contains("CREDITED IN YOUR PPF") ||
+            upper.contains("CREDITED IN NPS") ||
+            upper.contains("CREDITED TO NPS")
+        ) {
+            return false
+        }
+        val contributionOrReceived =
+            upper.contains("CONTRIBUTION") ||
+                upper.contains("RECEIVED IN YOUR PPF") ||
+                upper.contains("RECEIVED IN PPF") ||
+                upper.contains("RECEIVED IN YOUR NPS") ||
+                (upper.contains("RECEIVED") && upper.contains("THANK YOU"))
+        return contributionOrReceived &&
+            (upper.contains("RECEIVED") || upper.contains("THANK YOU"))
+    }
+
+    /**
+     * Card-bill acknowledgements that mention payment + card but never move money
+     * on an account ("payment of X towards your Credit Card has been posted").
+     * Bank BillPay SMS include "debited" and must remain Transfer rows.
+     */
+    private fun isCardPaymentAckWithoutMovement(body: String, upper: String): Boolean {
+        if (!PAYMENT_TOWARDS_CARD.containsMatchIn(body)) return false
+        if (!CREDIT_OR_YOUR_CARD.containsMatchIn(body)) return false
+        return MOVEMENT_VERBS.none { upper.contains(it) }
     }
 
     fun looksLikeSpam(body: String): Boolean = !isTransactional(body)

@@ -15,8 +15,8 @@ android {
         applicationId = "com.expensetracker.offline"
         minSdk = 29
         targetSdk = 34
-        versionCode = 108
-        versionName = "1.1.8"
+        versionCode = 122
+        versionName = "1.1.22"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -38,7 +38,7 @@ android {
             applicationIdSuffix = ".sms"
             // Sideload / F-Droid / GitHub — full on-device SMS auto-import.
             buildConfigField("boolean", "FEATURE_AUTO_SMS", "true")
-            resValue("string", "app_name", "Expense Tracker SMS")
+            resValue("string", "app_name", "Offline Expense Tracker")
         }
     }
 
