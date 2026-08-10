@@ -63,85 +63,67 @@ Upload the AAB in Play Console. Use the same keystore for all future updates.
 
 Upload `app-store-release.apk` (or AAB if accepted). Reuse the same signing key when possible. Link the same privacy policy.
 
-## Samsung Galaxy Store (step-by-step)
+## Samsung Galaxy Store — Offline Expense Tracker (SMS APK)
 
-Use the **`store`** flavor only (`com.expensetracker.offline`). Do **not** upload the SMS APK — Galaxy Store reviews permissions like Play and the SMS build requests `READ_SMS` / `RECEIVE_SMS`.
+Galaxy Store (unlike Google Play) can accept SMS-reading finance apps when you
+disclose permissions and host a privacy policy. For Galaxy, submit the **`sms`** flavor.
 
-### A. Seller account (one-time)
+Full copy-paste listing text: [`GALAXY_STORE_SMS_LISTING.md`](GALAXY_STORE_SMS_LISTING.md).
 
-1. Create a [Samsung account](https://account.samsung.com/) (prefer a company/private domain email; Gmail needs an explanation).
-2. Register at [Seller Portal](https://seller.samsungapps.com/) — set Country/Region correctly first (hard to change later).
-3. Apply for **commercial seller** status (required for free *and* paid apps):
-   - Private seller (individual) or Corporate seller
-   - Business verification: D‑U‑N‑S is easiest; otherwise contact Seller Portal Help → Contact us
-   - Financial info: PayPal is usually simplest; bank country must match Seller Portal country
-4. Wait for approval (often several days; bank/D‑U‑N‑S checks can take up to ~10 business days).
+| Field | Value |
+|-------|--------|
+| Listing title | **Offline Expense Tracker** |
+| Package | `com.expensetracker.offline.sms` |
+| Flavor | `sms` |
+| Binary | `./gradlew :app:assembleSmsRelease` → `app-sms-release.apk` |
+| `targetSdk` | 34 |
+| Price | Free |
+| Category | Finance |
 
-Docs: [Get started](https://developer.samsung.com/galaxy-store/prepare.html)
+### Seller account (one-time)
 
-### B. Binary to upload
+1. [Samsung account](https://account.samsung.com/) → [Seller Portal](https://seller.samsungapps.com/)
+2. Apply for **commercial seller** status (required for free apps too)
+3. Docs: [Get started](https://developer.samsung.com/galaxy-store/prepare.html)
 
-| Field | This project |
-|-------|----------------|
-| Package | `com.expensetracker.offline` |
-| Flavor | `store` |
-| `versionName` / `versionCode` | from `app/build.gradle.kts` (bump `versionCode` every upload) |
-| `targetSdk` | 34 (≥ 33 required) |
-| 64-bit | included (`arm64-v8a` in the APK) |
-| Format | **APK or AAB** (AAB → Galaxy generates a universal APK; once AAB, you can’t go back to APK for that app) |
+### What reviewers expect for SMS
 
-Build locally (release-signed):
+- Privacy policy URL (host `docs/privacy-policy.html` on HTTPS)
+- App description lists **each SMS-related permission and why**
+- No more permissions than needed (`READ_SMS`, `RECEIVE_SMS`, `RECEIVE_BOOT_COMPLETED`, notifications, biometric)
+- Emphasize **on-device only / no internet permission**
+
+Suggested privacy URL after GitHub Pages:
+`https://anuragsingh1227.github.io/expense-tracker/privacy-policy.html`
+
+### Build (release-signed)
 
 ```bash
-# Requires keystore.properties + release.keystore (see above)
-./gradlew :app:assembleStoreRelease
-# → app/build/outputs/apk/store/release/app-store-release.apk
-
-./gradlew :app:bundleStoreRelease
-# → app/build/outputs/bundle/storeRelease/app-store-release.aab
+# keystore.properties + release.keystore required for a real store upload
+./gradlew :app:assembleSmsRelease
 ```
 
-**Signing:** Galaxy Store rejects/updates require a stable release key. Do not upload a debug-signed APK. Create `release.keystore` once and keep it backed up.
+Do **not** upload a debug-signed APK. Keep the same keystore for all future updates of `com.expensetracker.offline.sms`.
 
-### C. Listing content to prepare
+### Submit
 
-1. **Privacy policy URL** (required) — host `docs/privacy-policy.html` publicly, e.g. GitHub Pages:
-   - Suggested path after enabling Pages on this repo:  
-     `https://anuragsingh1227.github.io/expense-tracker/privacy-policy.html`  
-   - Or any HTTPS page you control. Paste the same URL in Seller Portal + app overview.
-2. **App title:** Expense Tracker  
-3. **Short / long description** — offline Indian spend tracker; paste/share bank SMS; no account; no internet.  
-4. **Category:** Finance / Personal finance  
-5. **Screenshots** — phone captures of Spends, Activity, More (paste import). No device frame required; 16:9 or store-recommended sizes.  
-6. **Icon** — use `@mipmap/ic_launcher` export (512×512 PNG for store icon if asked).  
-7. **Age rating** — complete the questionnaire (finance / not for children under 13).  
-8. **Data safety / privacy** — no data collected by developer; everything on-device; no ads; no account.  
-9. **App access** — no login.  
-10. **Countries** — start with India (and any others you want).  
-11. **Price** — Free (no IAP in this app).
+1. Seller Portal → Android app → Add new app
+2. Title: **Offline Expense Tracker**
+3. Upload `app-sms-release.apk`
+4. Paste short/full description + permissions table from `GALAXY_STORE_SMS_LISTING.md`
+5. Screenshots of Spends / Activity / SMS onboarding
+6. Countries: start with India → Submit
 
-### D. Register & submit in Seller Portal
+### Do not confuse with Play
 
-1. **Android app** → Add new app → Application.
-2. Fill binary info → upload `app-store-release.apk` (or `.aab`).
-3. Complete listing, privacy, rating, devices (phones; add tablets if you tested).
-4. Save → **Submit** for review.
-5. Watch email / Seller Portal for defects (permissions, privacy URL, crashes, incomplete listing).
+| Store | Binary |
+|-------|--------|
+| **Galaxy Store** | SMS APK (`…offline.sms`) — this guide |
+| **Google Play** | Store AAB/APK (`…offline`) — no SMS permissions |
 
-### E. Common rejection traps for this app
+### After approval
 
-| Trap | Fix |
-|------|-----|
-| Uploading `…offline.sms` APK | Use **store** flavor only |
-| Debug-signed binary | Configure `keystore.properties` |
-| Broken / missing privacy URL | Host `docs/privacy-policy.html` on HTTPS |
-| Claiming auto-SMS in listing | Store build is paste/share only — say that clearly |
-| Same package already on Play with different signing | Keep one signing key for all stores for this package, or use a Galaxy-specific applicationId if you must diverge |
-
-### F. After approval
-
-- Each update: bump `versionCode`, rebuild store release, upload new binary, resubmit.
-- Prefer the same keystore forever for `com.expensetracker.offline`.
+Bump `versionCode`, rebuild SMS release, upload, resubmit.
 
 ## Security / size posture (store build)
 
@@ -153,5 +135,5 @@ Build locally (release-signed):
 
 ## Versioning
 
-- `versionName` `1.1.10`, `versionCode` `110` (bump `versionCode` on every store upload)
+- Bump `versionName` / `versionCode` in `app/build.gradle.kts` on every store upload (currently **1.1.22** / **122**)
 - Debug builds use `.debug` applicationId suffix so they can sit beside release installs
