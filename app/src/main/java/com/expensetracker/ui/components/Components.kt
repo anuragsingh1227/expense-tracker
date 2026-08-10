@@ -606,10 +606,15 @@ fun StackedMonthBars(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(6.dp))
+                    val hasSpend = col.total.amount.signum() > 0
                     val heightFraction = (col.total.amount.toDouble() / maxTotal).toFloat().coerceIn(0f, 1f)
-                    val barHeight = (88f * heightFraction).coerceAtLeast(
-                        if (col.total.amount.signum() > 0) 3f else 0f,
-                    )
+                    // Empty months keep a short placeholder so the fixed 3-slot axis
+                    // never collapses or stretches the single populated month.
+                    val barHeight = if (hasSpend) {
+                        (88f * heightFraction).coerceAtLeast(3f)
+                    } else {
+                        6f
+                    }
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -621,7 +626,13 @@ fun StackedMonthBars(
                                 .fillMaxWidth()
                                 .height(barHeight.dp)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                                .background(
+                                    if (hasSpend) {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                                    },
+                                ),
                             verticalArrangement = Arrangement.Bottom,
                         ) {
                             col.segments.asReversed().forEach { seg ->

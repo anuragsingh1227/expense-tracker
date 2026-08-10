@@ -69,8 +69,9 @@ fun DashboardScreen(
         state.spend.amount.signum() != 0 ||
         state.income.amount.signum() != 0 ||
         state.investments.amount.signum() != 0
-    // Stack / MoM only when the user opts into the 3-month filter.
-    val showMonthInsights = state.period == SpendPeriod.LAST_3_MONTHS
+    // Stacked chart always uses a fixed 3-month axis (padded zeros for empty months).
+    // MoM rising list stays on the longer-range chip.
+    val showMomInsights = state.period == SpendPeriod.LAST_3_MONTHS
 
     LazyColumn(
         modifier = Modifier
@@ -184,7 +185,7 @@ fun DashboardScreen(
                 }
             }
 
-            if (showMonthInsights && state.stack.any { it.total.amount.signum() > 0 }) {
+            if (state.stack.size == 3) {
                 item {
                     SurfaceCard {
                         Text(
@@ -203,7 +204,7 @@ fun DashboardScreen(
                 }
             }
 
-            if (showMonthInsights && state.momChanges.isNotEmpty()) {
+            if (showMomInsights && state.momChanges.isNotEmpty()) {
                 item {
                     SurfaceCard {
                         Text(

@@ -17,8 +17,8 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import java.time.Clock
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneOffset
-import java.util.concurrent.TimeUnit
 
 class SmsInboxScannerTest {
 
@@ -26,7 +26,7 @@ class SmsInboxScannerTest {
     private val clock = Clock.fixed(now, ZoneOffset.UTC)
 
     @Test
-    fun `first scan uses 90-day lookback and imports transactional SMS`() = runTest {
+    fun `first scan uses current calendar month and imports transactional SMS`() = runTest {
         val older = RawSms("VM-HDFCBK", SampleSms.HDFC_DEBIT, now.minusSeconds(3600))
         val otp = RawSms("VM-HDFCBK", SampleSms.OTP_MESSAGE, now.minusSeconds(1800))
         val promo = RawSms("VM-PROMO", SampleSms.PROMOTIONAL, now.minusSeconds(900))
@@ -34,7 +34,8 @@ class SmsInboxScannerTest {
         val repo = FakeTransactionRepository()
         val settings = FakeSettingsDao()
 
-        val result = SmsInboxScanner(source, SmsParser(), repo, settings, clock).scan()
+        val scanner = SmsInboxScanner(source, SmsParser(), repo, settings, clock)
+        val result = scanner.scan()
 
         assertThat(result.examined).isEqualTo(3)
         assertThat(result.inserted).isEqualTo(1)
@@ -42,8 +43,9 @@ class SmsInboxScannerTest {
         assertThat(repo.stored).hasSize(1)
         assertThat(settings.get(AppSettings.INITIAL_BACKFILL_DONE)).isEqualTo("true")
         assertThat(settings.get(AppSettings.LAST_SMS_SCAN_MILLIS)).isEqualTo(now.toEpochMilli().toString())
-        val expectedSince = now.toEpochMilli() - TimeUnit.DAYS.toMillis(90)
+        val expectedSince = LocalDate.of(2024, 6, 1).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
         assertThat(source.lastSince).isEqualTo(expectedSince)
+        assertThat(scanner.startOfCurrentMonthMillis()).isEqualTo(expectedSince)
     }
 
     @Test
@@ -71,7 +73,7 @@ class SmsInboxScannerTest {
         SmsInboxScanner(source, SmsParser(), FakeTransactionRepository(), settings, clock)
             .scan(forceFullLookback = true)
 
-        val expectedSince = now.toEpochMilli() - TimeUnit.DAYS.toMillis(90)
+        val expectedSince = LocalDate.of(2024, 6, 1).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
         assertThat(source.lastSince).isEqualTo(expectedSince)
     }
 

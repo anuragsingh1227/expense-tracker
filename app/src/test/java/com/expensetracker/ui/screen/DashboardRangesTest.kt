@@ -69,6 +69,14 @@ class DashboardRangesTest {
     }
 
     @Test
+    fun `monthKeysForLastThree is always three rolling calendar months`() {
+        val clock = Clock.fixed(Instant.parse("2024-03-14T20:00:00Z"), zone)
+        assertThat(DashboardRanges.monthKeysForLastThree(clock))
+            .containsExactly("2024-01", "2024-02", "2024-03")
+            .inOrder()
+    }
+
+    @Test
     fun `millisUntilNextDay is time remaining until local midnight`() {
         val clock = Clock.fixed(Instant.parse("2024-01-12T18:30:00Z"), ZoneOffset.UTC)
         // 18:30 UTC → 5.5 hours = 19_800_000 ms until midnight UTC
