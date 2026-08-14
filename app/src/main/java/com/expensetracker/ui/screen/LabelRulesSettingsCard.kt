@@ -160,9 +160,9 @@ private fun LabelRuleRow(
     onDelete: () -> Unit,
 ) {
     val criteria = buildList {
-        rule.senderContains?.let { add("sender: $it") }
-        rule.bodyContains?.let { add("body: $it") }
-        rule.merchantContains?.let { add("merchant: $it") }
+        rule.senderContains?.let { add(stringResource(R.string.label_rule_sender_prefix, it)) }
+        rule.bodyContains?.let { add(stringResource(R.string.label_rule_body_prefix, it)) }
+        rule.merchantContains?.let { add(stringResource(R.string.label_rule_merchant_prefix, it)) }
     }.joinToString(" · ")
 
     Row(

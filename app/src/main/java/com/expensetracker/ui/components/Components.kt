@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,6 +35,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -56,6 +59,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.expensetracker.R
+import com.expensetracker.domain.model.HashtagParser
 import com.expensetracker.domain.model.Money
 import com.expensetracker.domain.model.Transaction
 import com.expensetracker.domain.model.TransactionType
@@ -103,41 +107,33 @@ fun SurfaceCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun HeroBalanceCard(
-    label: String,
-    amount: Money,
-    supporting: String,
+fun TagChipRow(
+    selectedTags: Set<String>,
+    onChange: (Set<String>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val positive = amount.amount.signum() >= 0
-    Surface(
+    FlowRow(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                amount.formatInr(),
-                style = MaterialTheme.typography.displaySmall,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                supporting,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (positive) {
-                    ExpenseColors.Income
-                } else {
-                    MaterialTheme.colorScheme.error
+        val chipTags = (HashtagParser.SUGGESTED + selectedTags).distinctBy { it.lowercase() }
+        chipTags.forEach { tag ->
+            val selected = selectedTags.any { it.equals(tag, ignoreCase = true) }
+            FilterChip(
+                selected = selected,
+                onClick = {
+                    onChange(
+                        if (selected) {
+                            selectedTags.filterNot { it.equals(tag, ignoreCase = true) }.toSet()
+                        } else {
+                            selectedTags + tag
+                        },
+                    )
                 },
+                label = { Text("#$tag") },
             )
         }
     }
@@ -202,14 +198,19 @@ fun PeriodFilterRow(
     selected: SpendPeriod,
     onSelect: (SpendPeriod) -> Unit,
     modifier: Modifier = Modifier,
+    showBillingCycle: Boolean = true,
 ) {
-    val periods = listOf(
-        SpendPeriod.DAY to stringResource(R.string.period_day),
-        SpendPeriod.WEEK to stringResource(R.string.period_week),
-        SpendPeriod.MONTH to stringResource(R.string.period_month),
-        SpendPeriod.LAST_MONTH to stringResource(R.string.period_last_month),
-        SpendPeriod.LAST_3_MONTHS to stringResource(R.string.period_last_3_months),
-    )
+    val periods = buildList {
+        add(SpendPeriod.DAY to stringResource(R.string.period_day))
+        add(SpendPeriod.WEEK to stringResource(R.string.period_week))
+        add(SpendPeriod.MONTH to stringResource(R.string.period_month))
+        add(SpendPeriod.LAST_MONTH to stringResource(R.string.period_last_month))
+        add(SpendPeriod.LAST_3_MONTHS to stringResource(R.string.period_last_3_months))
+        add(SpendPeriod.FINANCIAL_YEAR to stringResource(R.string.period_financial_year))
+        if (showBillingCycle) {
+            add(SpendPeriod.BILLING_CYCLE to stringResource(R.string.period_billing_cycle))
+        }
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -263,6 +264,8 @@ fun EmptyState(
     body: String,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
+    secondaryActionLabel: String? = null,
+    onSecondaryAction: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -303,6 +306,14 @@ fun EmptyState(
                 Text(actionLabel)
             }
         }
+        if (secondaryActionLabel != null && onSecondaryAction != null) {
+            TextButton(
+                onClick = onSecondaryAction,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
+                Text(secondaryActionLabel)
+            }
+        }
     }
 }
 
@@ -321,7 +332,10 @@ fun TransactionListItem(
     val amountColor = if (isCredit) ExpenseColors.Income else MaterialTheme.colorScheme.onSurface
     val date = tx.timestamp.atZone(ZoneId.systemDefault()).format(TX_FMT)
     val title = tx.merchant ?: tx.category
-    val a11y = "$title, $sign${tx.amount.maskableFormatInr()}, ${tx.category}, $date"
+    val a11y = buildString {
+        append("$title, $sign${tx.amount.maskableFormatInr()}, ${tx.category}, $date")
+        if (selectMode && selected) append(", selected")
+    }
 
     Row(
         modifier = modifier
@@ -385,8 +399,14 @@ fun TransactionListItem(
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(2.dp))
+            val meta = buildList {
+                add(tx.category)
+                if (tx.isSplit) add(stringResource(R.string.list_split_badge))
+                tx.tags.firstOrNull()?.let { add("#$it") }
+                add(date)
+            }.joinToString(" · ")
             Text(
-                "${tx.category} · $date",
+                meta,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
