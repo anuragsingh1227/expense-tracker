@@ -87,6 +87,9 @@ class LedgerBucketsCategoryTest {
         assertThat(byCat[Categories.GROCERIES]?.amount).isEqualTo(BigDecimal("412.00"))
         assertThat(byCat).doesNotContainKey(Categories.REFUND)
     }
+
+    @Test
+    fun `unmatched refund stays as negative refund so bars still match hero`() {
         val food = tx(
             amount = "800.00",
             type = TransactionType.DEBIT,
