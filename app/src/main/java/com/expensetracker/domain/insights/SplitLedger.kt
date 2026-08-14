@@ -19,10 +19,10 @@ object SplitLedger {
     fun balances(txs: Iterable<Transaction>): List<PeerBalance> {
         val totals = linkedMapOf<String, BigDecimal>()
         txs.asSequence().filter { it.isSplit }.forEach { tx ->
-            tx.splitShares.forEach { share ->
-                val name = share.name.trim()
-                if (name.isEmpty()) return@forEach
-                val key = totals.keys.firstOrNull { it.equals(name, ignoreCase = true) } ?: name
+            tx.splitShares.forEach share@{ share ->
+                val person = share.name.trim()
+                if (person.isEmpty()) return@share
+                val key = totals.keys.firstOrNull { it.equals(person, ignoreCase = true) } ?: person
                 val current = totals[key] ?: BigDecimal.ZERO
                 totals[key] = current + share.amountOwed.amount
             }

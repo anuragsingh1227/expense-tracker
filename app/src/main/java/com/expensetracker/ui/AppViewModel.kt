@@ -381,16 +381,16 @@ class AppViewModel @Inject constructor(
 
             withContext(Dispatchers.IO) {
                 chunks.forEachIndexed { index, body ->
-                    val raw = RawSms(
+                    val sms = RawSms(
                             sender = senderHint,
                             body = body,
                             timestamp = now.minusSeconds(index.toLong()),
                         )
-                    if (cardStatements.ingest(raw) != null) {
+                    if (cardStatements.ingest(sms) != null) {
                         skipped++
                         return@forEachIndexed
                     }
-                    val tx = parser.parse(raw)
+                    val tx = parser.parse(sms)
                     if (tx == null) {
                         rejected++
                         return@forEachIndexed
