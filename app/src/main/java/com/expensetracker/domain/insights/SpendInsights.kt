@@ -89,6 +89,7 @@ object SpendInsights {
                 (totalsByCategory[row.category] ?: BigDecimal.ZERO) + row.amount.amount
         }
         val top = totalsByCategory.entries
+            .filter { it.value.signum() > 0 }
             .sortedByDescending { it.value }
             .take(topCategories)
             .map { it.key }
@@ -96,9 +97,11 @@ object SpendInsights {
 
         return monthKeysOldestFirst.map { key ->
             val monthRows = rows.filter { it.monthKey == key }
+            val monthTotal = monthRows.fold(BigDecimal.ZERO) { acc, row -> acc + row.amount.amount }
             val byCat = linkedMapOf<String, BigDecimal>()
             var other = BigDecimal.ZERO
             monthRows.forEach { row ->
+                if (row.amount.amount.signum() <= 0) return@forEach
                 if (row.category in top) {
                     byCat[row.category] =
                         (byCat[row.category] ?: BigDecimal.ZERO) + row.amount.amount
@@ -109,8 +112,10 @@ object SpendInsights {
             if (other.compareTo(BigDecimal.ZERO) > 0) {
                 byCat[OTHER] = other
             }
-            val total = byCat.values.fold(BigDecimal.ZERO, BigDecimal::add)
-            val totalD = total.toDouble().coerceAtLeast(0.01)
+            val barTotal = byCat.values.fold(BigDecimal.ZERO, BigDecimal::add)
+            val totalD = monthTotal.toDouble().let { net ->
+                if (net > 0.0) net else barTotal.toDouble().coerceAtLeast(0.01)
+            }
             val ordered = top.toList() + listOfNotNull(OTHER.takeIf { OTHER in byCat })
             val segments = ordered.mapNotNull { cat ->
                 val amt = byCat[cat] ?: return@mapNotNull null
@@ -125,7 +130,7 @@ object SpendInsights {
                 monthKey = key,
                 monthLabel = shortMonthLabel(key),
                 segments = segments,
-                total = Money(total.setScale(2, RoundingMode.HALF_UP)),
+                total = Money(monthTotal.setScale(2, RoundingMode.HALF_UP)),
             )
         }
     }

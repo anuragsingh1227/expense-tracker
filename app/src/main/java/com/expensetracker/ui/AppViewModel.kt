@@ -9,15 +9,18 @@ import com.expensetracker.data.backup.BackupImportResult
 import com.expensetracker.data.backup.BackupRepository
 import com.expensetracker.data.db.dao.SettingsDao
 import com.expensetracker.data.db.entity.SettingsEntity
+import com.expensetracker.data.repository.CardStatementRepository
 import com.expensetracker.data.repository.TransactionRepository
 import com.expensetracker.domain.security.AppForegroundTracker
 import com.expensetracker.domain.security.BiometricAuthenticator
 import com.expensetracker.domain.security.PinHasher
+import com.expensetracker.sms.CardDueReminderScheduler
 import com.expensetracker.sms.CardStatementIngestor
 import com.expensetracker.sms.SmsInboxScanner
 import com.expensetracker.sms.SmsScanResult
 import com.expensetracker.sms.parser.RawSms
 import com.expensetracker.sms.parser.SmsParser
+import com.expensetracker.ui.widget.MonthSpendWidgetProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -78,6 +81,8 @@ class AppViewModel @Inject constructor(
     private val parser: SmsParser,
     private val clock: Clock,
     private val cardStatements: CardStatementIngestor,
+    private val cardStatementRepository: CardStatementRepository,
+    private val cardDueReminderScheduler: CardDueReminderScheduler,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
@@ -487,6 +492,7 @@ class AppViewModel @Inject constructor(
                     from.bufferedReader().use { it.readText() }
                 }
                 val result = withContext(Dispatchers.IO) { backupRepository.importJson(json) }
+                applyRestoredSessionState()
                 _backupState.value = BackupUiState.Imported(result)
             } catch (t: Throwable) {
                 _backupState.value = BackupUiState.Error(BackupErrorKind.IMPORT)
@@ -496,6 +502,26 @@ class AppViewModel @Inject constructor(
 
     fun clearBackupState() {
         _backupState.value = BackupUiState.Idle
+    }
+
+    /**
+     * Backup writes Room only. Reload lock, hide-amounts, owner name, widget mask,
+     * and card-due alarms so the current process matches the restored file.
+     */
+    private suspend fun applyRestoredSessionState() {
+        _ownerName.value = settingsDao.get(AppSettings.OWNER_NAME)?.trim().orEmpty()
+        withContext(Dispatchers.IO) { ownerNameProvider.refresh() }
+
+        amountsHiddenResolved = true
+        val hidden = settingsDao.get(AppSettings.AMOUNTS_HIDDEN) == "true"
+        _amountsHidden.value = hidden
+        MonthSpendWidgetProvider.applyAmountsHidden(appContext, hidden)
+
+        loadAppLockState()
+
+        withContext(Dispatchers.IO) {
+            cardDueReminderScheduler.scheduleAll(cardStatementRepository.getAll())
+        }
     }
 
     private companion object {

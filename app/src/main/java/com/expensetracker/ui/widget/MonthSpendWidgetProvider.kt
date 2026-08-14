@@ -31,6 +31,7 @@ class MonthSpendWidgetProvider : AppWidgetProvider() {
     companion object {
         const val PREFS = "month_spend_widget"
         const val KEY_AMOUNT = "amount_text"
+        const val KEY_AMOUNT_RAW = "amount_raw"
 
         fun cacheAmount(
             context: Context,
@@ -45,8 +46,18 @@ class MonthSpendWidgetProvider : AppWidgetProvider() {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit()
                 .putString(KEY_AMOUNT, formatted)
+                .putString(KEY_AMOUNT_RAW, amount.toPlainString())
                 .apply()
             pushToWidgets(context)
+        }
+
+        /** Re-applies hide-amounts to the last cached total without needing the dashboard. */
+        fun applyAmountsHidden(context: Context, amountsHidden: Boolean) {
+            val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString(KEY_AMOUNT_RAW, null)
+                ?: return
+            val amount = raw.toBigDecimalOrNull() ?: return
+            cacheAmount(context, amount, amountsHidden)
         }
 
         fun pushToWidgets(context: Context) {

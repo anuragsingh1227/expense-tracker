@@ -129,14 +129,11 @@ class LedgerCalculationTest {
         assertThat(SpendMath.netCashFlow(income, spend, invest).amount)
             .isEqualTo(BigDecimal("43664.00"))
 
-        // Category bars must reconcile to spend (skill: withOtherBucket)
-        val byCat = aug.filter(LedgerBuckets::isSpend)
-            .groupBy { it.category }
-            .map { (cat, rows) ->
-                com.expensetracker.data.repository.CategorySpend(
-                    cat,
-                    rows.fold(Money.ZERO) { a, t -> a + t.amount },
-                )
+        // Category bars must reconcile to spend after refunds are netted
+        val byCat = LedgerBuckets.spendByCategory(aug)
+            .entries
+            .map { (cat, amount) ->
+                com.expensetracker.data.repository.CategorySpend(cat, amount)
             }
             .sortedByDescending { it.amount.amount }
             .take(2)
@@ -169,6 +166,8 @@ class LedgerCalculationTest {
         val net = LedgerBuckets.spend(listOf(spend, refund))
         assertThat(net.amount).isEqualTo(BigDecimal.ZERO.setScale(2))
         assertThat(LedgerBuckets.income(listOf(spend, refund)).amount).isEqualTo(BigDecimal.ZERO.setScale(2))
+        val byCat = LedgerBuckets.spendByCategory(listOf(spend, refund))
+        assertThat(byCat.values.fold(Money.ZERO) { acc, m -> acc + m }).isEqualTo(net)
     }
 
     @Test

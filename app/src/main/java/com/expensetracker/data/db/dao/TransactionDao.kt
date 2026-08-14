@@ -157,7 +157,8 @@ interface TransactionDao {
 
     /**
      * Category spend grouped by local calendar month (`yyyy-MM`).
-     * Aggregation stays in SQLite — no raw SMS leaves the device.
+     * Debit-only; the app nets refunds in
+     * [com.expensetracker.domain.insights.LedgerBuckets.spendByCategoryAndMonth].
      */
     @Query(
         """

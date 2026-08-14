@@ -1,12 +1,11 @@
 package com.expensetracker.data.repository
 
 import com.expensetracker.data.AppSettings
-import com.expensetracker.data.db.dao.CategoryMonthTotal
-import com.expensetracker.data.db.dao.CategoryTotal
 import com.expensetracker.data.db.dao.SettingsDao
 import com.expensetracker.data.db.dao.TransactionDao
 import com.expensetracker.data.db.entity.TransactionEntity
 import com.expensetracker.domain.insights.CategoryMonthSpend
+import com.expensetracker.domain.insights.LedgerBuckets
 import com.expensetracker.domain.insights.LedgerDedupe
 import com.expensetracker.domain.insights.SelfTransferLinker
 import com.expensetracker.domain.model.HashtagParser
@@ -21,6 +20,7 @@ import kotlinx.coroutines.flow.map
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Instant
+import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -114,19 +114,20 @@ class TransactionRepositoryImpl @Inject constructor(
         dao.observeInvestmentTotal(from, to).map { it.toMoney() }
 
     override fun observeCategorySpend(from: Instant, to: Instant, limit: Int): Flow<List<CategorySpend>> =
-        dao.observeCategoryTotals(from, to, limit).map { rows ->
-            rows.map { CategorySpend(it.category, it.total.toMoney()) }
+        dao.searchBetween(null, from, to).map { rows ->
+            LedgerBuckets.spendByCategory(rows.map { it.toDomain() })
+                .entries
+                .sortedByDescending { it.value.amount }
+                .take(limit)
+                .map { CategorySpend(it.key, it.value) }
         }
 
     override fun observeCategoryMonthSpend(from: Instant, to: Instant): Flow<List<CategoryMonthSpend>> =
-        dao.observeCategoryMonthTotals(from, to).map { rows ->
-            rows.map {
-                CategoryMonthSpend(
-                    category = it.category,
-                    monthKey = it.monthKey,
-                    amount = it.total.toMoney(),
-                )
-            }
+        dao.searchBetween(null, from, to).map { rows ->
+            LedgerBuckets.spendByCategoryAndMonth(
+                rows.map { it.toDomain() },
+                ZoneId.systemDefault(),
+            )
         }
 
     override fun search(query: String?): Flow<List<Transaction>> =
