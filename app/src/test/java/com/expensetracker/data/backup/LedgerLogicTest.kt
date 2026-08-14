@@ -442,6 +442,10 @@ class LedgerLogicTest {
         override suspend fun deleteById(id: Long) {
             rows.removeAll { it.id == id }
         }
+
+        override suspend fun deleteAll() {
+            rows.clear()
+        }
     }
 
     private class FakeSettingsDao : SettingsDao {

@@ -51,13 +51,23 @@ class MonthSpendWidgetProvider : AppWidgetProvider() {
             pushToWidgets(context)
         }
 
-        /** Re-applies hide-amounts to the last cached total without needing the dashboard. */
+        /**
+         * Re-applies hide-amounts to the last cached total without needing the dashboard.
+         * When hiding, always write the mask even if the raw amount is missing (upgrade
+         * path / empty widget) so a previously formatted figure never stays on the home screen.
+         */
         fun applyAmountsHidden(context: Context, amountsHidden: Boolean) {
-            val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getString(KEY_AMOUNT_RAW, null)
-                ?: return
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            if (amountsHidden) {
+                prefs.edit()
+                    .putString(KEY_AMOUNT, context.getString(R.string.amount_hidden_mask))
+                    .apply()
+                pushToWidgets(context)
+                return
+            }
+            val raw = prefs.getString(KEY_AMOUNT_RAW, null) ?: return
             val amount = raw.toBigDecimalOrNull() ?: return
-            cacheAmount(context, amount, amountsHidden)
+            cacheAmount(context, amount, amountsHidden = false)
         }
 
         fun pushToWidgets(context: Context) {

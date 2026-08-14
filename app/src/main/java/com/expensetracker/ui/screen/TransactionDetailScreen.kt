@@ -72,6 +72,7 @@ import com.expensetracker.ui.components.LoadingBlock
 import com.expensetracker.ui.components.MetaRow
 import com.expensetracker.ui.components.StatusPill
 import com.expensetracker.ui.components.SurfaceCard
+import com.expensetracker.ui.components.TagChipRow
 import com.expensetracker.ui.components.maskableFormatInr
 import com.expensetracker.ui.theme.ExpenseColors
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -627,26 +628,10 @@ fun TransactionDetailScreen(
             )
 
             Text(stringResource(R.string.label_tags), style = MaterialTheme.typography.titleMedium)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                val chipTags = (HashtagParser.SUGGESTED + selectedTags).distinctBy { it.lowercase() }
-                chipTags.forEach { tag ->
-                    val selected = selectedTags.any { it.equals(tag, ignoreCase = true) }
-                    FilterChip(
-                        selected = selected,
-                        onClick = {
-                            selectedTags = if (selected) {
-                                selectedTags.filterNot { it.equals(tag, ignoreCase = true) }.toSet()
-                            } else {
-                                selectedTags + tag
-                            }
-                        },
-                        label = { Text("#$tag") },
-                    )
-                }
-            }
+            TagChipRow(
+                selectedTags = selectedTags,
+                onChange = { selectedTags = it },
+            )
 
             SurfaceCard {
                 Row(

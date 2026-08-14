@@ -165,10 +165,12 @@ private fun AppRoot(
     val appLockState by appViewModel.appLockState.collectAsState()
     // null = still loading from settings; "" = loaded but not set yet.
     val ownerName = appViewModel.ownerName.collectAsState().value
+    val amountsHiddenReady by appViewModel.amountsHiddenReady.collectAsState()
 
-    if (appLockState.loading || ownerName == null) {
+    if (appLockState.loading || ownerName == null || !amountsHiddenReady) {
         // Avoid flashing app content (or skipping onboarding) before we know
-        // whether app lock is enabled and whether a name has been set.
+        // whether app lock is enabled, whether a name has been set, and whether
+        // amounts should be masked.
         AppLoadingGate()
         return
     }
@@ -318,7 +320,11 @@ private fun AppRoot(
                 )
             }
             composable("add_transaction") {
-                AddTransactionScreen(onBack = { nav.popBackStack() })
+                AddTransactionScreen(
+                    onBack = { nav.popBackStack() },
+                    amountsHidden = amountsHidden,
+                    onToggleAmountsHidden = { appViewModel.toggleAmountsHidden() },
+                )
             }
         }
     }

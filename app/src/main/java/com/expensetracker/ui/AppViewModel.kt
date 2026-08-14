@@ -101,6 +101,11 @@ class AppViewModel @Inject constructor(
     /** Persisted "hide rupee amounts" toggle — shared app-wide via CompositionLocal. */
     val amountsHidden: StateFlow<Boolean> = _amountsHidden.asStateFlow()
 
+    /** False until Room has been read (or the user toggled). MainActivity waits on
+     *  this so Spends never flashes real figures before hide-amounts is known. */
+    private val _amountsHiddenReady = MutableStateFlow(false)
+    val amountsHiddenReady: StateFlow<Boolean> = _amountsHiddenReady.asStateFlow()
+
     /** True once either the initial load finished or the user has toggled — guards
      *  against the slow initial settings read overwriting a fast user tap. */
     private var amountsHiddenResolved = false
@@ -120,6 +125,8 @@ class AppViewModel @Inject constructor(
                 _amountsHidden.value = persisted
                 amountsHiddenResolved = true
             }
+            MonthSpendWidgetProvider.applyAmountsHidden(appContext, _amountsHidden.value)
+            _amountsHiddenReady.value = true
         }
         viewModelScope.launch {
             // drop(1): ignore the initial sentinel value emitted before any real backgrounding.
@@ -142,6 +149,7 @@ class AppViewModel @Inject constructor(
 
     fun toggleAmountsHidden() {
         amountsHiddenResolved = true
+        _amountsHiddenReady.value = true
         val next = !_amountsHidden.value
         _amountsHidden.value = next
         viewModelScope.launch {
@@ -520,6 +528,7 @@ class AppViewModel @Inject constructor(
         withContext(Dispatchers.IO) { ownerNameProvider.refresh() }
 
         amountsHiddenResolved = true
+        _amountsHiddenReady.value = true
         val hidden = settingsDao.get(AppSettings.AMOUNTS_HIDDEN) == "true"
         _amountsHidden.value = hidden
         MonthSpendWidgetProvider.applyAmountsHidden(appContext, hidden)

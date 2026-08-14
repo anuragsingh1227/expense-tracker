@@ -135,6 +135,96 @@ class BackupRepositoryTest {
         assertThat(ownerNames2.names()).containsExactly("Priya")
     }
 
+    @Test
+    fun `empty backup arrays replace local merchants budgets labels and card dues`() = runTest {
+        val catalog = MerchantCatalog(FakeMerchantDao())
+        catalog.remember("Swiggy", Categories.FOOD)
+        val labels = LabelRuleCatalog(FakeLabelRuleDao())
+        labels.create(
+            label = "Food",
+            senderContains = "HDFCBK",
+            bodyContains = "SWIGGY",
+            merchantContains = null,
+        )
+        val budgets = FakeBudgetDao()
+        budgets.upsert(
+            BudgetEntity(
+                category = Categories.FOOD,
+                monthlyLimit = BigDecimal("1000.00"),
+                startsAt = now,
+            ),
+        )
+        val cards = FakeCardStatementDao()
+        cards.insert(
+            CardStatementEntity(
+                bank = "HDFC",
+                cardLast4 = "1111",
+                totalDue = BigDecimal("100.00"),
+                minDue = null,
+                dueDateEpochDay = 20_000L,
+                timestamp = now,
+                sender = "VM-HDFCBK",
+                rawSms = "x",
+                dedupeHash = "stale-card",
+            ),
+        )
+        val settingsDao = FakeSettingsDao()
+        val json = """
+            {"version": 4, "transactions": [], "merchants": [], "labelRules": [], "budgets": [], "cardStatements": []}
+        """.trimIndent()
+        val result = BackupRepository(
+            FakeTransactionDao(), catalog, labels, budgets, cards, settingsDao,
+            OwnerNameProvider(settingsDao), clock,
+        ).importJson(json)
+
+        assertThat(catalog.allOverrides()).isEmpty()
+        assertThat(labels.all()).isEmpty()
+        assertThat(budgets.getAll()).isEmpty()
+        assertThat(cards.rows).isEmpty()
+        assertThat(result.merchantsRestored).isEqualTo(0)
+        assertThat(result.labelRulesRestored).isEqualTo(0)
+        assertThat(result.budgetsRestored).isEqualTo(0)
+        assertThat(result.cardStatementsRestored).isEqualTo(0)
+    }
+
+    @Test
+    fun `missing backup arrays leave local merchants budgets and card dues`() = runTest {
+        val catalog = MerchantCatalog(FakeMerchantDao())
+        catalog.remember("Swiggy", Categories.FOOD)
+        val budgets = FakeBudgetDao()
+        budgets.upsert(
+            BudgetEntity(
+                category = Categories.FOOD,
+                monthlyLimit = BigDecimal("1000.00"),
+                startsAt = now,
+            ),
+        )
+        val cards = FakeCardStatementDao()
+        cards.insert(
+            CardStatementEntity(
+                bank = "HDFC",
+                cardLast4 = "1111",
+                totalDue = BigDecimal("100.00"),
+                minDue = null,
+                dueDateEpochDay = 20_000L,
+                timestamp = now,
+                sender = "VM-HDFCBK",
+                rawSms = "x",
+                dedupeHash = "keep-card",
+            ),
+        )
+        val settingsDao = FakeSettingsDao()
+        val json = """{"version": 3, "transactions": []}"""
+        BackupRepository(
+            FakeTransactionDao(), catalog, LabelRuleCatalog(FakeLabelRuleDao()),
+            budgets, cards, settingsDao, OwnerNameProvider(settingsDao), clock,
+        ).importJson(json)
+
+        assertThat(catalog.allOverrides()).hasSize(1)
+        assertThat(budgets.getAll()).hasSize(1)
+        assertThat(cards.rows).hasSize(1)
+    }
+
     private class FakeTransactionDao : TransactionDao {
         private val rows = mutableListOf<TransactionEntity>()
         private var seq = 1L
@@ -266,6 +356,10 @@ class BackupRepositoryTest {
             rows.find { it.dedupeHash == hash }
         override suspend fun deleteById(id: Long) {
             rows.removeAll { it.id == id }
+        }
+
+        override suspend fun deleteAll() {
+            rows.clear()
         }
     }
 

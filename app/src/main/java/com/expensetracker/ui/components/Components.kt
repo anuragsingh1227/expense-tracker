@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,6 +35,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -56,6 +59,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.expensetracker.R
+import com.expensetracker.domain.model.HashtagParser
 import com.expensetracker.domain.model.Money
 import com.expensetracker.domain.model.Transaction
 import com.expensetracker.domain.model.TransactionType
@@ -103,41 +107,33 @@ fun SurfaceCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun HeroBalanceCard(
-    label: String,
-    amount: Money,
-    supporting: String,
+fun TagChipRow(
+    selectedTags: Set<String>,
+    onChange: (Set<String>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val positive = amount.amount.signum() >= 0
-    Surface(
+    FlowRow(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                amount.formatInr(),
-                style = MaterialTheme.typography.displaySmall,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                supporting,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (positive) {
-                    ExpenseColors.Income
-                } else {
-                    MaterialTheme.colorScheme.error
+        val chipTags = (HashtagParser.SUGGESTED + selectedTags).distinctBy { it.lowercase() }
+        chipTags.forEach { tag ->
+            val selected = selectedTags.any { it.equals(tag, ignoreCase = true) }
+            FilterChip(
+                selected = selected,
+                onClick = {
+                    onChange(
+                        if (selected) {
+                            selectedTags.filterNot { it.equals(tag, ignoreCase = true) }.toSet()
+                        } else {
+                            selectedTags + tag
+                        },
+                    )
                 },
+                label = { Text("#$tag") },
             )
         }
     }

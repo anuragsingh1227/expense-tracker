@@ -50,6 +50,7 @@
     <string name="empty_transactions_title">Nothing here yet</string>
     <string name="settings_paste_title">Add from SMS text</string>
     <string name="settings_paste_body">Paste a bank or UPI message (or share text into this app). Separate multiple messages with a blank line. No inbox permission required.</string>
+    <string name="settings_paste_body_sms">Paste a bank or UPI message you received, or share text into this app. Separate multiple messages with a blank line. Use inbox import below to scan automatically.</string>
     <string name="settings_paste_hint">SMS body</string>
     <string name="settings_paste_action">Import pasted SMS</string>
     <string name="sms_text_import_result">Imported %1$d · card dues %2$d · skipped %3$d · not a payment %4$d</string>
@@ -164,13 +165,13 @@
     <string name="label_rule_save">Save rule</string>
     <string name="action_cancel">Cancel</string>
     <string name="settings_backup_title">Backup &amp; restore</string>
-    <string name="settings_backup_body">JSON backup of payments, rules, budgets, card dues, and settings. Pick Drive or Files in the system saver. This file can be restored later.</string>
+    <string name="settings_backup_body">JSON backup of payments, rules, budgets, card dues, and settings. Restore merges payments (skips duplicates) and replaces merchant rules, labels, budgets, and card dues from the file. Pick Drive or Files in the system saver.</string>
     <string name="settings_csv_body">Spreadsheet export only — it cannot be restored into the app. Use JSON backup to move phones.</string>
     <string name="backup_export">Backup</string>
     <string name="backup_import">Restore</string>
     <string name="backup_working">Working…</string>
     <string name="backup_exported">Backup saved. Choose Google Drive in the picker next time to keep it in the cloud.</string>
-    <string name="backup_imported">Restored %1$d new · skipped %2$d duplicates · %3$d merchant rules · %4$d label rules · %5$d card dues</string>
+    <string name="backup_imported">Restored %1$d new · skipped %2$d duplicates · %3$d merchant rules · %4$d label rules · %5$d card dues · %6$d budgets</string>
     <string name="settings_cleanup_title">Clean spam</string>
     <string name="settings_cleanup_body">Removes imported SMS that look like offers, OTPs, due reminders, or other non-transactions. Manual cash entries are never deleted.</string>
     <string name="cleanup_spam">Remove spam entries</string>
@@ -252,7 +253,7 @@
     <string name="settings_section_security">Security</string>
     <string name="settings_section_data">Data</string>
     <string name="settings_hide_amounts_title">Hide amounts</string>
-    <string name="settings_hide_amounts_body">Mask rupee amounts on Spends, Activity, transaction details, and the home widget. Notifications show the merchant and date, not the figure.</string>
+    <string name="settings_hide_amounts_body">Mask rupee amounts on Spends, Activity, Add, transaction details, More (budgets and card dues), and the home widget. Notifications show merchant and category, not the figure.</string>
     <string name="dashboard_card_due_title">Upcoming card dues</string>
     <string name="dashboard_card_due_row">%1$s %2$s · due %3$s</string>
     <string name="dashboard_card_due_amount">Total %1$s</string>
@@ -278,4 +279,6 @@
     <string name="label_rule_body_prefix">Message: %1$s</string>
     <string name="label_rule_merchant_prefix">Merchant: %1$s</string>
     <string name="sms_copied">SMS copied</string>
+    <string name="merchant_required">Enter who you paid or received from.</string>
+    <string name="amount_hidden_unmask_hint">Tap the eye icon to enter an amount.</string>
 </resources>

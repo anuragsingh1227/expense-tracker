@@ -215,7 +215,7 @@ class BackupRepository @Inject constructor(
                 category = o.getString("category"),
             )
         }
-        if (merchants.isNotEmpty()) {
+        if (root.hasArray("merchants")) {
             merchantCatalog.replaceAll(merchants)
         }
 
@@ -230,13 +230,13 @@ class BackupRepository @Inject constructor(
                 merchantContains = o.optStringOrNull("merchantContains"),
             )
         }
-        if (labelRules.isNotEmpty()) {
+        if (root.hasArray("labelRules")) {
             labelRuleCatalog.replaceAll(labelRules)
         }
 
         var budgetsRestored = 0
         val budgetArray = root.optJSONArray("budgets") ?: JSONArray()
-        if (budgetArray.length() > 0) {
+        if (root.hasArray("budgets")) {
             budgetDao.deleteAll()
             for (i in 0 until budgetArray.length()) {
                 val o = budgetArray.getJSONObject(i)
@@ -253,24 +253,27 @@ class BackupRepository @Inject constructor(
 
         var cardStatementsRestored = 0
         val cardArray = root.optJSONArray("cardStatements") ?: JSONArray()
-        for (i in 0 until cardArray.length()) {
-            val o = cardArray.getJSONObject(i)
-            val hash = o.optString("dedupeHash")
-            if (hash.isBlank()) continue
-            val id = cardStatementDao.insert(
-                CardStatementEntity(
-                    bank = o.optStringOrNull("bank"),
-                    cardLast4 = o.optStringOrNull("cardLast4"),
-                    totalDue = o.optStringOrNull("totalDue")?.let(::BigDecimal),
-                    minDue = o.optStringOrNull("minDue")?.let(::BigDecimal),
-                    dueDateEpochDay = o.getLong("dueDateEpochDay"),
-                    timestamp = Instant.ofEpochMilli(o.getLong("timestamp")),
-                    sender = o.optStringOrNull("sender"),
-                    rawSms = o.optStringOrNull("rawSms"),
-                    dedupeHash = hash,
-                ),
-            )
-            if (id != -1L) cardStatementsRestored++
+        if (root.hasArray("cardStatements")) {
+            cardStatementDao.deleteAll()
+            for (i in 0 until cardArray.length()) {
+                val o = cardArray.getJSONObject(i)
+                val hash = o.optString("dedupeHash")
+                if (hash.isBlank()) continue
+                val id = cardStatementDao.insert(
+                    CardStatementEntity(
+                        bank = o.optStringOrNull("bank"),
+                        cardLast4 = o.optStringOrNull("cardLast4"),
+                        totalDue = o.optStringOrNull("totalDue")?.let(::BigDecimal),
+                        minDue = o.optStringOrNull("minDue")?.let(::BigDecimal),
+                        dueDateEpochDay = o.getLong("dueDateEpochDay"),
+                        timestamp = Instant.ofEpochMilli(o.getLong("timestamp")),
+                        sender = o.optStringOrNull("sender"),
+                        rawSms = o.optStringOrNull("rawSms"),
+                        dedupeHash = hash,
+                    ),
+                )
+                if (id != -1L) cardStatementsRestored++
+            }
         }
 
         var settingsRestored = 0
@@ -344,6 +347,9 @@ private fun JSONObject.optStringOrNull(key: String): String? {
     val value = optString(key, "")
     return value.takeIf { it.isNotEmpty() && it != "null" }
 }
+
+/** True when [key] is present as a JSON array, including an empty one. */
+private fun JSONObject.hasArray(key: String): Boolean = has(key) && !isNull(key)
 
 private fun tagsArray(tagsJson: String?): JSONArray {
     if (tagsJson.isNullOrBlank()) return JSONArray()

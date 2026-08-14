@@ -26,4 +26,7 @@ interface CardStatementDao {
 
     @Query("DELETE FROM card_statements WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM card_statements")
+    suspend fun deleteAll()
 }

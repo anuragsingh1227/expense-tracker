@@ -167,7 +167,9 @@ fun SettingsScreen(
             Text(stringResource(R.string.settings_paste_title), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(6.dp))
             Text(
-                stringResource(R.string.settings_paste_body),
+                stringResource(
+                    if (autoSms) R.string.settings_paste_body_sms else R.string.settings_paste_body,
+                ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -428,6 +430,7 @@ fun SettingsScreen(
                             state.result.merchantsRestored,
                             state.result.labelRulesRestored,
                             state.result.cardStatementsRestored,
+                            state.result.budgetsRestored,
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.secondary,
