@@ -74,7 +74,8 @@ object LedgerBuckets {
             if (merchant != null) {
                 for (pool in pools) {
                     if (left.amount.signum() <= 0) break
-                    if (pool.merchant != merchant || pool.remaining.amount.signum() <= 0) continue
+                    if (pool.remaining.amount.signum() <= 0) continue
+                    if (pool.merchant == null || !merchantsMatch(pool.merchant, merchant)) continue
                     val take = if (pool.remaining.amount <= left.amount) pool.remaining else left
                     pool.remaining = pool.remaining - take
                     add(pool.category, Money.ZERO - take)
@@ -104,6 +105,13 @@ object LedgerBuckets {
 
     private fun normalizeMerchant(merchant: String?): String? =
         merchant?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+
+    /** Exact match, or one name contains the other (min 4 chars) — "swiggy" vs "swiggy instamart". */
+    internal fun merchantsMatch(a: String, b: String): Boolean {
+        if (a == b) return true
+        if (a.length < 4 || b.length < 4) return false
+        return a.contains(b) || b.contains(a)
+    }
 
     private fun monthKey(tx: Transaction, zone: ZoneId): String {
         val date = tx.timestamp.atZone(zone).toLocalDate()

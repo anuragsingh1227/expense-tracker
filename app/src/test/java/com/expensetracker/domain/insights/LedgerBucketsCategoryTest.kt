@@ -68,7 +68,25 @@ class LedgerBucketsCategoryTest {
     }
 
     @Test
-    fun `unmatched refund stays as negative refund so bars still match hero`() {
+    fun `partial merchant name still nets refund against original category`() {
+        val purchase = tx(
+            amount = "612.00",
+            type = TransactionType.DEBIT,
+            merchant = "SWIGGY INSTAMART",
+            category = Categories.GROCERIES,
+            at = day(2026, 8, 8),
+        )
+        val refund = tx(
+            amount = "200.00",
+            type = TransactionType.CREDIT,
+            merchant = "SWIGGY",
+            category = Categories.REFUND,
+            at = day(2026, 8, 9),
+        )
+        val byCat = LedgerBuckets.spendByCategory(listOf(purchase, refund))
+        assertThat(byCat[Categories.GROCERIES]?.amount).isEqualTo(BigDecimal("412.00"))
+        assertThat(byCat).doesNotContainKey(Categories.REFUND)
+    }
         val food = tx(
             amount = "800.00",
             type = TransactionType.DEBIT,

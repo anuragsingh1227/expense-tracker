@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -45,7 +46,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -63,6 +66,7 @@ import com.expensetracker.domain.model.TransactionType
 import com.expensetracker.sms.parser.Categories
 import com.expensetracker.sms.parser.LabelRuleCatalog
 import com.expensetracker.sms.parser.MerchantCatalog
+import com.expensetracker.ui.components.AmountVisibilityToggle
 import com.expensetracker.ui.components.DatePickerField
 import com.expensetracker.ui.components.LoadingBlock
 import com.expensetracker.ui.components.MetaRow
@@ -201,6 +205,8 @@ class TransactionDetailViewModel @Inject constructor(
 fun TransactionDetailScreen(
     transactionId: Long,
     onBack: () -> Unit,
+    amountsHidden: Boolean = false,
+    onToggleAmountsHidden: () -> Unit = {},
     viewModel: TransactionDetailViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(transactionId) { viewModel.load(transactionId) }
@@ -208,6 +214,8 @@ fun TransactionDetailScreen(
     val ruleMessage by viewModel.ruleSavedMessage.collectAsState()
     val saveEvent by viewModel.saveEvent.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val clipboard = LocalClipboardManager.current
+    val copiedSmsMessage = stringResource(R.string.sms_copied)
     val scope = rememberCoroutineScope()
     val savedMessage = stringResource(R.string.transaction_saved)
     var ruleNeedsCriteria by remember { mutableStateOf(false) }
@@ -254,6 +262,12 @@ fun TransactionDetailScreen(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
+                actions = {
+                    AmountVisibilityToggle(
+                        amountsHidden = amountsHidden,
+                        onToggle = onToggleAmountsHidden,
+                    )
+                },
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -366,13 +380,17 @@ fun TransactionDetailScreen(
                 )
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(
-                    value = amountText,
-                    onValueChange = { amountText = it.filter { c -> c.isDigit() || c == '.' } },
+                    value = if (amountsHidden) stringResource(R.string.amount_hidden_mask) else amountText,
+                    onValueChange = {
+                        if (!amountsHidden) amountText = it.filter { c -> c.isDigit() || c == '.' }
+                    },
                     label = { Text(stringResource(R.string.label_amount)) },
                     singleLine = true,
+                    readOnly = amountsHidden,
+                    enabled = !amountsHidden,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
-                    prefix = { Text("₹") },
+                    prefix = if (amountsHidden) null else ({ Text("₹") }),
                 )
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(
@@ -402,7 +420,26 @@ fun TransactionDetailScreen(
             }
 
             SurfaceCard {
-                Text(stringResource(R.string.label_raw_sms), style = MaterialTheme.typography.labelMedium)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(stringResource(R.string.label_raw_sms), style = MaterialTheme.typography.labelMedium)
+                    if (!current.rawSms.isNullOrBlank()) {
+                        IconButton(
+                            onClick = {
+                                clipboard.setText(AnnotatedString(current.rawSms.orEmpty()))
+                                scope.launch { snackbarHostState.showSnackbar(copiedSmsMessage) }
+                            },
+                        ) {
+                            Icon(
+                                Icons.Outlined.ContentCopy,
+                                contentDescription = stringResource(R.string.action_copy_sms),
+                            )
+                        }
+                    }
+                }
                 Spacer(Modifier.height(6.dp))
                 Text(
                     current.rawSms ?: "—",
@@ -650,17 +687,20 @@ fun TransactionDetailScreen(
                                 shape = RoundedCornerShape(14.dp),
                             )
                             OutlinedTextField(
-                                value = amount,
+                                value = if (amountsHidden) stringResource(R.string.amount_hidden_mask) else amount,
                                 onValueChange = { value ->
+                                    if (amountsHidden) return@OutlinedTextField
                                     splitRows = splitRows.toMutableList().also {
                                         it[index] = name to value.filter { c -> c.isDigit() || c == '.' }
                                     }
                                 },
                                 label = { Text(stringResource(R.string.split_amount_owed)) },
                                 singleLine = true,
+                                readOnly = amountsHidden,
+                                enabled = !amountsHidden,
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(14.dp),
-                                prefix = { Text("₹") },
+                                prefix = if (amountsHidden) null else ({ Text("₹") }),
                             )
                         }
                         Spacer(Modifier.height(8.dp))
@@ -668,6 +708,48 @@ fun TransactionDetailScreen(
                     TextButton(
                         onClick = { splitRows = splitRows + ("" to "") },
                     ) { Text(stringResource(R.string.split_add_person)) }
+                    val parsedAmountForSplit = runCatching { Money.ofRupees(amountText.trim()) }.getOrNull()
+                    val splitSharesPreview = splitRows.mapNotNull { (name, amt) ->
+                        val n = name.trim()
+                        val money = runCatching { Money.ofRupees(amt.trim()) }.getOrNull()
+                        if (n.isEmpty() || money == null || money.amount.signum() <= 0) null
+                        else SplitShare(n, money)
+                    }
+                    if (parsedAmountForSplit != null && splitSharesPreview.isNotEmpty()) {
+                        val remaining = parsedAmountForSplit.amount.subtract(
+                            splitSharesPreview.fold(java.math.BigDecimal.ZERO) { acc, s -> acc + s.amountOwed.amount },
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            stringResource(
+                                R.string.split_remaining,
+                                Money(remaining.setScale(2, java.math.RoundingMode.HALF_UP)).maskableFormatInr(),
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (remaining.signum() < 0) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                    val splitInvalid = splitOn && (
+                        splitSharesPreview.isEmpty() ||
+                            (
+                                parsedAmountForSplit != null &&
+                                    splitSharesPreview.fold(java.math.BigDecimal.ZERO) { acc, s ->
+                                        acc + s.amountOwed.amount
+                                    } > parsedAmountForSplit.amount
+                                )
+                        )
+                    if (splitInvalid) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            stringResource(R.string.split_invalid),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
             }
 
@@ -689,31 +771,34 @@ fun TransactionDetailScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
+                val parsedAmountForSave = runCatching { Money.ofRupees(amountText.trim()) }.getOrNull()
+                val amountValid = parsedAmountForSave != null && parsedAmountForSave.amount.signum() > 0
+                val sharesForSave = if (splitOn) {
+                    splitRows.mapNotNull { (name, amt) ->
+                        val n = name.trim()
+                        val money = runCatching { Money.ofRupees(amt.trim()) }.getOrNull()
+                        if (n.isEmpty() || money == null || money.amount.signum() <= 0) null
+                        else SplitShare(n, money)
+                    }
+                } else {
+                    emptyList()
+                }
+                val splitTotal = sharesForSave.fold(java.math.BigDecimal.ZERO) { acc, s -> acc + s.amountOwed.amount }
+                val splitOk = !splitOn || (
+                    sharesForSave.isNotEmpty() &&
+                        parsedAmountForSave != null &&
+                        splitTotal <= parsedAmountForSave.amount
+                    )
                 Button(
                     onClick = {
-                        val parsedAmount = runCatching {
-                            Money.ofRupees(amountText.trim())
-                        }.getOrNull()
-                        if (parsedAmount == null || parsedAmount.amount.signum() <= 0) return@Button
+                        val parsedAmount = parsedAmountForSave ?: return@Button
+                        if (!amountValid || !splitOk) return@Button
                         val zone = ZoneId.systemDefault()
                         val oldLocal = current.timestamp.atZone(zone)
                         val newTimestamp = date
                             .atTime(oldLocal.toLocalTime())
                             .atZone(zone)
                             .toInstant()
-                        val shares = if (splitOn) {
-                            splitRows.mapNotNull { (name, amt) ->
-                                val n = name.trim()
-                                val money = runCatching { Money.ofRupees(amt.trim()) }.getOrNull()
-                                if (n.isEmpty() || money == null || money.amount.signum() <= 0) {
-                                    null
-                                } else {
-                                    SplitShare(n, money)
-                                }
-                            }
-                        } else {
-                            emptyList()
-                        }
                         viewModel.save(
                             current.copy(
                                 amount = parsedAmount,
@@ -723,12 +808,13 @@ fun TransactionDetailScreen(
                                 notes = notes.trim().ifEmpty { null },
                                 type = type,
                                 tags = HashtagParser.merge(notes, selectedTags),
-                                isSplit = splitOn && shares.isNotEmpty(),
-                                splitShares = shares,
+                                isSplit = splitOn && sharesForSave.isNotEmpty(),
+                                splitShares = sharesForSave,
                             ),
                             rememberForMerchant = rememberMerchant,
                         )
                     },
+                    enabled = amountValid && splitOk,
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 52.dp),

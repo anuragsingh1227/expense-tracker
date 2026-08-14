@@ -19,6 +19,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -38,7 +39,15 @@ class CardDueAlarmReceiver : BroadcastReceiver() {
         scope.launch {
             try {
                 val statement = statements.find(id) ?: return@launch
-                notify(context, statement.bank, statement.cardLast4, statement.dueDate.toString(), kind, id)
+                val dueFmt = DateTimeFormatter.ofPattern("d MMM yyyy")
+                notify(
+                    context,
+                    statement.bank,
+                    statement.cardLast4,
+                    statement.dueDate.format(dueFmt),
+                    kind,
+                    id,
+                )
             } finally {
                 pending.finish()
             }

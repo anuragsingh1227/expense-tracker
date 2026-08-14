@@ -9,4 +9,5 @@
     <string name="onboarding_benefit_auto">Works offline with local parsing only</string>
     <string name="settings_subtitle">Import, money, security, backup</string>
     <string name="settings_privacy_body">This store build never requests SMS inbox permission. You choose which messages to paste or share. No internet permission — nothing leaves your phone unless you export a backup file yourself.</string>
+    <string name="settings_about_body">Expense Tracker never reads your SMS inbox. Paste or share a bank message, or add a cash payment. No account, no cloud, no internet permission.</string>
 </resources>

@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.InputStream
@@ -104,7 +105,7 @@ class AppViewModel @Inject constructor(
      *  against the slow initial settings read overwriting a fast user tap. */
     private var amountsHiddenResolved = false
 
-    /** In-memory consecutive PIN failures (reset on success or process death). */
+    /** Cached consecutive PIN failures, synced from Room so force-stop cannot reset lockout. */
     private var pinFailureCount = 0
 
     init {
@@ -145,22 +146,28 @@ class AppViewModel @Inject constructor(
         _amountsHidden.value = next
         viewModelScope.launch {
             settingsDao.put(SettingsEntity(AppSettings.AMOUNTS_HIDDEN, next.toString()))
+            MonthSpendWidgetProvider.applyAmountsHidden(appContext, next)
         }
     }
 
-    private suspend fun loadAppLockState() {
+    private suspend fun loadAppLockState(relock: Boolean = true) {
         val enabled = settingsDao.get(AppSettings.APP_LOCK_ENABLED) == "true"
         val biometricEnabled = settingsDao.get(AppSettings.APP_LOCK_BIOMETRIC_ENABLED) == "true"
         val lockoutUntil = settingsDao.get(AppSettings.APP_LOCK_LOCKOUT_UNTIL)?.toLongOrNull() ?: 0L
         val now = Instant.now(clock).toEpochMilli()
         val activeLockout = if (lockoutUntil > now) lockoutUntil else 0L
         pinFailureCount = settingsDao.get(AppSettings.APP_LOCK_PIN_FAILURES)?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+        val locked = when {
+            !enabled -> false
+            relock -> true
+            else -> _appLockState.value.locked
+        }
         _appLockState.value = AppLockUiState(
             loading = false,
             enabled = enabled,
             biometricAvailable = BiometricAuthenticator.isAvailable(appContext),
             biometricEnabled = biometricEnabled,
-            locked = enabled,
+            locked = locked,
             lockoutUntilMillis = activeLockout,
         )
     }
@@ -517,10 +524,20 @@ class AppViewModel @Inject constructor(
         _amountsHidden.value = hidden
         MonthSpendWidgetProvider.applyAmountsHidden(appContext, hidden)
 
-        loadAppLockState()
+        loadAppLockState(relock = false)
 
         withContext(Dispatchers.IO) {
+            transactionRepository.reconcileSelfTransfers()
             cardDueReminderScheduler.scheduleAll(cardStatementRepository.getAll())
+            val window = com.expensetracker.ui.screen.DashboardRanges.forPeriod(
+                com.expensetracker.ui.screen.SpendPeriod.MONTH,
+                clock,
+            )
+            val spend = transactionRepository.observeSpendTotal(
+                window.fromInclusive,
+                window.toExclusive,
+            ).first()
+            MonthSpendWidgetProvider.cacheAmount(appContext, spend.amount, hidden)
         }
     }
 

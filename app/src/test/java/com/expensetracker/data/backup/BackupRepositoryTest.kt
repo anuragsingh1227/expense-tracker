@@ -286,3 +286,11 @@ class BackupRepositoryTest {
         override fun observe(key: String): Flow<String?> = flowOf(map[key])
     }
 }
+
+class BackupSettingsKeysTest {
+    @Test
+    fun `lockout fields are included in backup settings`() {
+        assertThat(BackupRepository.SETTINGS_KEYS).contains(AppSettings.APP_LOCK_LOCKOUT_UNTIL)
+        assertThat(BackupRepository.SETTINGS_KEYS).contains(AppSettings.APP_LOCK_PIN_FAILURES)
+    }
+}

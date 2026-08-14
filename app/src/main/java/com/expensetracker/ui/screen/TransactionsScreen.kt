@@ -88,6 +88,7 @@ data class ActivityUiState(
     val availableBanks: List<String> = emptyList(),
     val availableCategories: List<String> = emptyList(),
     val peerBalances: List<PeerBalance> = emptyList(),
+    val billingCycleStartDay: Int = 1,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -145,13 +146,14 @@ class TransactionsViewModel @Inject constructor(
                     availableBanks = banks,
                     availableCategories = categories,
                     peerBalances = debts,
+                    billingCycleStartDay = filters.billingDay,
                 )
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ActivityUiState())
 
     fun setQuery(q: String) {
-        queryFlow.value = q.takeIf { it.isNotBlank() }
+        queryFlow.value = q.trim().removePrefix("#").takeIf { it.isNotBlank() }
     }
 
     fun setPeriod(period: SpendPeriod) {
@@ -186,6 +188,7 @@ class TransactionsViewModel @Inject constructor(
 fun TransactionsScreen(
     onOpenTransaction: (Long) -> Unit,
     onAddTransaction: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     amountsHidden: Boolean = false,
     onToggleAmountsHidden: () -> Unit = {},
     viewModel: TransactionsViewModel = hiltViewModel(),
@@ -215,6 +218,11 @@ fun TransactionsScreen(
     LaunchedEffect(state.availableBanks, state.bankFilter) {
         val selected = state.bankFilter ?: return@LaunchedEffect
         if (selected !in state.availableBanks) viewModel.setBankFilter(null)
+    }
+    LaunchedEffect(state.period, state.billingCycleStartDay) {
+        if (state.period == SpendPeriod.BILLING_CYCLE && state.billingCycleStartDay == 1) {
+            viewModel.setPeriod(SpendPeriod.MONTH)
+        }
     }
 
     fun toggleSelected(id: Long) {
@@ -349,6 +357,7 @@ fun TransactionsScreen(
             PeriodFilterRow(
                 selected = state.period,
                 onSelect = viewModel::setPeriod,
+                showBillingCycle = state.billingCycleStartDay != 1,
             )
             if (state.peerBalances.isNotEmpty()) {
                 Spacer(Modifier.height(10.dp))
@@ -407,6 +416,8 @@ fun TransactionsScreen(
                         body = stringResource(R.string.empty_period_transactions),
                         actionLabel = stringResource(R.string.empty_dashboard_add),
                         onAction = onAddTransaction,
+                        secondaryActionLabel = stringResource(R.string.empty_dashboard_paste),
+                        onSecondaryAction = onOpenSettings,
                     )
                 }
                 else -> {

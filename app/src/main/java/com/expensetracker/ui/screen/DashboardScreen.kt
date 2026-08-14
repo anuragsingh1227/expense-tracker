@@ -60,14 +60,22 @@ fun DashboardScreen(
             MonthSpendWidgetProvider.cacheAmount(context, state.spend.amount, amountsHidden)
         }
     }
-    val spendLabel = when (state.period) {
-        SpendPeriod.DAY -> stringResource(R.string.period_spent_day)
-        SpendPeriod.WEEK -> stringResource(R.string.period_spent_week)
-        SpendPeriod.MONTH -> stringResource(R.string.period_spent_month)
-        SpendPeriod.LAST_MONTH -> stringResource(R.string.period_spent_last_month)
-        SpendPeriod.LAST_3_MONTHS -> stringResource(R.string.period_spent_last_3_months)
-        SpendPeriod.FINANCIAL_YEAR -> stringResource(R.string.period_spent_financial_year)
-        SpendPeriod.BILLING_CYCLE -> stringResource(R.string.period_spent_billing_cycle)
+    val spendLabel = when {
+        state.spend.amount.signum() < 0 -> stringResource(R.string.period_net_refunds)
+        else -> when (state.period) {
+            SpendPeriod.DAY -> stringResource(R.string.period_spent_day)
+            SpendPeriod.WEEK -> stringResource(R.string.period_spent_week)
+            SpendPeriod.MONTH -> stringResource(R.string.period_spent_month)
+            SpendPeriod.LAST_MONTH -> stringResource(R.string.period_spent_last_month)
+            SpendPeriod.LAST_3_MONTHS -> stringResource(R.string.period_spent_last_3_months)
+            SpendPeriod.FINANCIAL_YEAR -> stringResource(R.string.period_spent_financial_year)
+            SpendPeriod.BILLING_CYCLE -> stringResource(R.string.period_spent_billing_cycle)
+        }
+    }
+    LaunchedEffect(state.period, state.billingCycleStartDay) {
+        if (state.period == SpendPeriod.BILLING_CYCLE && state.billingCycleStartDay == 1) {
+            viewModel.setPeriod(SpendPeriod.MONTH)
+        }
     }
 
     LazyColumn(
@@ -107,6 +115,7 @@ fun DashboardScreen(
             PeriodFilterRow(
                 selected = state.period,
                 onSelect = viewModel::setPeriod,
+                showBillingCycle = state.billingCycleStartDay != 1,
             )
         }
 

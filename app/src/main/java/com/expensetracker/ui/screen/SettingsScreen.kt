@@ -427,6 +427,7 @@ fun SettingsScreen(
                             state.result.transactionsSkipped,
                             state.result.merchantsRestored,
                             state.result.labelRulesRestored,
+                            state.result.cardStatementsRestored,
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.secondary,
@@ -448,6 +449,16 @@ fun SettingsScreen(
                 }
                 BackupUiState.Idle -> Unit
             }
+        }
+
+        SurfaceCard {
+            Text(stringResource(R.string.settings_csv_title), style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                stringResource(R.string.settings_csv_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
                 onClick = {

@@ -283,6 +283,14 @@ class BackupRepository @Inject constructor(
                     settingsRestored++
                 }
             }
+            val restoredLock = settingsObj.has(AppSettings.APP_LOCK_ENABLED) ||
+                settingsObj.has(AppSettings.APP_LOCK_PIN_HASH)
+            if (restoredLock && !settingsObj.has(AppSettings.APP_LOCK_PIN_FAILURES)) {
+                entities += SettingsEntity(AppSettings.APP_LOCK_PIN_FAILURES, "0")
+            }
+            if (restoredLock && !settingsObj.has(AppSettings.APP_LOCK_LOCKOUT_UNTIL)) {
+                entities += SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, "0")
+            }
             if (entities.isNotEmpty()) {
                 settingsDao.putAll(entities)
                 ownerNameProvider.refresh()
@@ -316,6 +324,8 @@ class BackupRepository @Inject constructor(
             AppSettings.APP_LOCK_BIOMETRIC_ENABLED,
             AppSettings.AMOUNTS_HIDDEN,
             AppSettings.CC_BILLING_CYCLE_START_DAY,
+            AppSettings.APP_LOCK_LOCKOUT_UNTIL,
+            AppSettings.APP_LOCK_PIN_FAILURES,
         )
     }
 }

@@ -45,6 +45,7 @@ data class DashboardState(
     val momPartial: Boolean = false,
     val stack: List<StackMonthColumn> = emptyList(),
     val upcomingDues: List<CardStatement> = emptyList(),
+    val billingCycleStartDay: Int = 1,
 ) {
     /** Income − spend − investments (transfers ignored). */
     val net: Money get() = SpendMath.netCashFlow(income, spend, investments)
@@ -136,6 +137,7 @@ class DashboardViewModel @Inject constructor(
                     momPartial = compare.currentIsPartial,
                     stack = i.stack,
                     upcomingDues = dues.filter { !it.dueDate.isBefore(today) }.take(3),
+                    billingCycleStartDay = billingDay,
                 )
             }
         }

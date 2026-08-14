@@ -202,16 +202,19 @@ fun PeriodFilterRow(
     selected: SpendPeriod,
     onSelect: (SpendPeriod) -> Unit,
     modifier: Modifier = Modifier,
+    showBillingCycle: Boolean = true,
 ) {
-    val periods = listOf(
-        SpendPeriod.DAY to stringResource(R.string.period_day),
-        SpendPeriod.WEEK to stringResource(R.string.period_week),
-        SpendPeriod.MONTH to stringResource(R.string.period_month),
-        SpendPeriod.LAST_MONTH to stringResource(R.string.period_last_month),
-        SpendPeriod.LAST_3_MONTHS to stringResource(R.string.period_last_3_months),
-        SpendPeriod.FINANCIAL_YEAR to stringResource(R.string.period_financial_year),
-        SpendPeriod.BILLING_CYCLE to stringResource(R.string.period_billing_cycle),
-    )
+    val periods = buildList {
+        add(SpendPeriod.DAY to stringResource(R.string.period_day))
+        add(SpendPeriod.WEEK to stringResource(R.string.period_week))
+        add(SpendPeriod.MONTH to stringResource(R.string.period_month))
+        add(SpendPeriod.LAST_MONTH to stringResource(R.string.period_last_month))
+        add(SpendPeriod.LAST_3_MONTHS to stringResource(R.string.period_last_3_months))
+        add(SpendPeriod.FINANCIAL_YEAR to stringResource(R.string.period_financial_year))
+        if (showBillingCycle) {
+            add(SpendPeriod.BILLING_CYCLE to stringResource(R.string.period_billing_cycle))
+        }
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -333,7 +336,10 @@ fun TransactionListItem(
     val amountColor = if (isCredit) ExpenseColors.Income else MaterialTheme.colorScheme.onSurface
     val date = tx.timestamp.atZone(ZoneId.systemDefault()).format(TX_FMT)
     val title = tx.merchant ?: tx.category
-    val a11y = "$title, $sign${tx.amount.maskableFormatInr()}, ${tx.category}, $date"
+    val a11y = buildString {
+        append("$title, $sign${tx.amount.maskableFormatInr()}, ${tx.category}, $date")
+        if (selectMode && selected) append(", selected")
+    }
 
     Row(
         modifier = modifier

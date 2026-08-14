@@ -260,6 +260,7 @@ private fun AppRoot(
                 TransactionsScreen(
                     onOpenTransaction = { nav.navigate("transaction/$it") },
                     onAddTransaction = { nav.navigate("add_transaction") },
+                    onOpenSettings = { nav.navigate(Tab.Settings.route) },
                     amountsHidden = amountsHidden,
                     onToggleAmountsHidden = { appViewModel.toggleAmountsHidden() },
                 )
@@ -309,7 +310,12 @@ private fun AppRoot(
             }
             composable("transaction/{id}") { entry ->
                 val id = entry.arguments?.getString("id")?.toLongOrNull() ?: return@composable
-                TransactionDetailScreen(transactionId = id, onBack = { nav.popBackStack() })
+                TransactionDetailScreen(
+                    transactionId = id,
+                    onBack = { nav.popBackStack() },
+                    amountsHidden = amountsHidden,
+                    onToggleAmountsHidden = { appViewModel.toggleAmountsHidden() },
+                )
             }
             composable("add_transaction") {
                 AddTransactionScreen(onBack = { nav.popBackStack() })
