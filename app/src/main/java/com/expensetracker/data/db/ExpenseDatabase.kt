@@ -6,6 +6,7 @@ import androidx.room.TypeConverters
 import com.expensetracker.data.db.converter.Converters
 import com.expensetracker.data.db.dao.BankDao
 import com.expensetracker.data.db.dao.BudgetDao
+import com.expensetracker.data.db.dao.CardStatementDao
 import com.expensetracker.data.db.dao.CategoryDao
 import com.expensetracker.data.db.dao.LabelRuleDao
 import com.expensetracker.data.db.dao.MerchantDao
@@ -13,6 +14,7 @@ import com.expensetracker.data.db.dao.SettingsDao
 import com.expensetracker.data.db.dao.TransactionDao
 import com.expensetracker.data.db.entity.BankEntity
 import com.expensetracker.data.db.entity.BudgetEntity
+import com.expensetracker.data.db.entity.CardStatementEntity
 import com.expensetracker.data.db.entity.CategoryEntity
 import com.expensetracker.data.db.entity.LabelRuleEntity
 import com.expensetracker.data.db.entity.MerchantEntity
@@ -28,8 +30,9 @@ import com.expensetracker.data.db.entity.TransactionEntity
         BankEntity::class,
         BudgetEntity::class,
         SettingsEntity::class,
+        CardStatementEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -41,6 +44,7 @@ abstract class ExpenseDatabase : RoomDatabase() {
     abstract fun budgetDao(): BudgetDao
     abstract fun bankDao(): BankDao
     abstract fun settingsDao(): SettingsDao
+    abstract fun cardStatementDao(): CardStatementDao
 
     companion object {
         const val NAME = "expense.db"

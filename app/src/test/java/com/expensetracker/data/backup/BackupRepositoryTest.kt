@@ -148,6 +148,19 @@ class BackupRepositoryTest {
         override suspend fun deleteById(id: Long) = Unit
         override suspend fun findById(id: Long): TransactionEntity? = rows.find { it.id == id }
         override suspend fun findByHash(hash: String): TransactionEntity? = rows.find { it.dedupeHash == hash }
+        override suspend fun findNearDuplicate(
+            amount: java.math.BigDecimal,
+            last4: String,
+            merchant: String?,
+            fromInclusive: Instant,
+            toInclusive: Instant,
+        ): TransactionEntity? = rows.find { row ->
+            row.amount.compareTo(amount) == 0 &&
+                !row.timestamp.isBefore(fromInclusive) &&
+                !row.timestamp.isAfter(toInclusive) &&
+                (row.accountLast4 == last4 || row.cardLast4 == last4) &&
+                row.merchant?.lowercase() == merchant?.lowercase()
+        }
         override fun observeRecent(limit: Int) = flowOf(rows.take(limit))
         override fun observeAll() = flowOf(rows)
         override fun observeBetween(from: Instant, to: Instant, limit: Int) = flowOf(
@@ -246,5 +259,7 @@ class BackupRepositoryTest {
         override suspend fun delete(key: String) {
             map.remove(key)
         }
+
+        override fun observe(key: String): Flow<String?> = flowOf(map[key])
     }
 }

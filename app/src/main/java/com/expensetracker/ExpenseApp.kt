@@ -63,9 +63,19 @@ class ExpenseApp : Application() {
             setShowBadge(true)
         }
         nm.createNotificationChannel(channel)
+        val dues = NotificationChannel(
+            CHANNEL_CARD_DUES,
+            getString(R.string.channel_card_dues_name),
+            NotificationManager.IMPORTANCE_DEFAULT,
+        ).apply {
+            description = getString(R.string.channel_card_dues_desc)
+            setShowBadge(true)
+        }
+        nm.createNotificationChannel(dues)
     }
 
     companion object {
         const val CHANNEL_TRANSACTIONS = "transactions"
+        const val CHANNEL_CARD_DUES = "card_dues"
     }
 }

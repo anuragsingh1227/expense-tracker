@@ -30,6 +30,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -53,8 +54,10 @@ import androidx.lifecycle.viewModelScope
 import com.expensetracker.R
 import com.expensetracker.data.db.entity.LabelRuleEntity
 import com.expensetracker.data.repository.TransactionRepository
+import com.expensetracker.domain.model.HashtagParser
 import com.expensetracker.domain.model.Money
 import com.expensetracker.domain.model.PaymentMode
+import com.expensetracker.domain.model.SplitShare
 import com.expensetracker.domain.model.Transaction
 import com.expensetracker.domain.model.TransactionType
 import com.expensetracker.sms.parser.Categories
@@ -255,6 +258,16 @@ fun TransactionDetailScreen(
         var category by remember(current.id, current.category) { mutableStateOf(current.category) }
         var type by remember(current.id, current.type) { mutableStateOf(current.type) }
         var notes by remember(current.id) { mutableStateOf(current.notes.orEmpty()) }
+        var selectedTags by remember(current.id) {
+            mutableStateOf(HashtagParser.merge(current.notes, current.tags).toSet())
+        }
+        var splitOn by remember(current.id, current.isSplit) { mutableStateOf(current.isSplit) }
+        var splitRows by remember(current.id) {
+            mutableStateOf(
+                current.splitShares.map { it.name to it.amountOwed.amount.stripTrailingZeros().toPlainString() }
+                    .ifEmpty { listOf("" to "") },
+            )
+        }
         var amountText by remember(current.id, current.amount) {
             mutableStateOf(current.amount.amount.stripTrailingZeros().toPlainString())
         }
@@ -565,12 +578,98 @@ fun TransactionDetailScreen(
             )
             OutlinedTextField(
                 value = notes,
-                onValueChange = { notes = it },
+                onValueChange = { value ->
+                    notes = value
+                    selectedTags = HashtagParser.merge(value, selectedTags).toSet()
+                },
                 label = { Text(stringResource(R.string.label_notes)) },
+                supportingText = { Text(stringResource(R.string.label_notes_hashtag_hint)) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
                 minLines = 2,
             )
+
+            Text(stringResource(R.string.label_tags), style = MaterialTheme.typography.titleMedium)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                val chipTags = (HashtagParser.SUGGESTED + selectedTags).distinctBy { it.lowercase() }
+                chipTags.forEach { tag ->
+                    val selected = selectedTags.any { it.equals(tag, ignoreCase = true) }
+                    FilterChip(
+                        selected = selected,
+                        onClick = {
+                            selectedTags = if (selected) {
+                                selectedTags.filterNot { it.equals(tag, ignoreCase = true) }.toSet()
+                            } else {
+                                selectedTags + tag
+                            }
+                        },
+                        label = { Text("#$tag") },
+                    )
+                }
+            }
+
+            SurfaceCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.split_toggle_title),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            stringResource(R.string.split_toggle_body),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = splitOn, onCheckedChange = { splitOn = it })
+                }
+                if (splitOn) {
+                    Spacer(Modifier.height(12.dp))
+                    splitRows.forEachIndexed { index, (name, amount) ->
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            OutlinedTextField(
+                                value = name,
+                                onValueChange = { value ->
+                                    splitRows = splitRows.toMutableList().also {
+                                        it[index] = value to amount
+                                    }
+                                },
+                                label = { Text(stringResource(R.string.split_person_name)) },
+                                singleLine = true,
+                                modifier = Modifier.weight(1.2f),
+                                shape = RoundedCornerShape(14.dp),
+                            )
+                            OutlinedTextField(
+                                value = amount,
+                                onValueChange = { value ->
+                                    splitRows = splitRows.toMutableList().also {
+                                        it[index] = name to value.filter { c -> c.isDigit() || c == '.' }
+                                    }
+                                },
+                                label = { Text(stringResource(R.string.split_amount_owed)) },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(14.dp),
+                                prefix = { Text("₹") },
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    TextButton(
+                        onClick = { splitRows = splitRows + ("" to "") },
+                    ) { Text(stringResource(R.string.split_add_person)) }
+                }
+            }
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -606,6 +705,19 @@ fun TransactionDetailScreen(
                             .atTime(oldLocal.toLocalTime())
                             .atZone(zone)
                             .toInstant()
+                        val shares = if (splitOn) {
+                            splitRows.mapNotNull { (name, amt) ->
+                                val n = name.trim()
+                                val money = runCatching { Money.ofRupees(amt.trim()) }.getOrNull()
+                                if (n.isEmpty() || money == null || money.amount.signum() <= 0) {
+                                    null
+                                } else {
+                                    SplitShare(n, money)
+                                }
+                            }
+                        } else {
+                            emptyList()
+                        }
                         viewModel.save(
                             current.copy(
                                 amount = parsedAmount,
@@ -614,6 +726,9 @@ fun TransactionDetailScreen(
                                 category = category.trim().ifEmpty { current.category },
                                 notes = notes.trim().ifEmpty { null },
                                 type = type,
+                                tags = HashtagParser.merge(notes, selectedTags),
+                                isSplit = splitOn && shares.isNotEmpty(),
+                                splitShares = shares,
                             ),
                             rememberForMerchant = rememberMerchant,
                         )

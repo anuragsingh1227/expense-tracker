@@ -109,9 +109,11 @@ object TransactionGate {
         // Axis compact multi-line template: "Debit INR 17383.00\nAxis Bank A/c XX…"
         "DEBIT INR", "DEBIT RS", "DEBIT ₹",
         "TRANSFERRED TO",
+        "TRANSFERRED RS", "TRANSFERRED INR", "TRANSFERRED ₹",
         // ICICI "Acc XX293 debited Rs. X on DATE Info..." — bare "debited" + amount,
         // no with/for/from/via connector.
         "DEBITED RS", "DEBITED INR", "DEBITED ₹",
+        "DEBITED BY",
     )
     private val STRONG_CREDIT = listOf(
         "HAS BEEN CREDITED", "BEEN CREDITED", "CREDITED WITH", "CREDITED TO", "CREDITED",

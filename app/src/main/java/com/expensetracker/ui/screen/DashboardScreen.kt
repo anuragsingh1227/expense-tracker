@@ -65,6 +65,8 @@ fun DashboardScreen(
         SpendPeriod.MONTH -> stringResource(R.string.period_spent_month)
         SpendPeriod.LAST_MONTH -> stringResource(R.string.period_spent_last_month)
         SpendPeriod.LAST_3_MONTHS -> stringResource(R.string.period_spent_last_3_months)
+        SpendPeriod.FINANCIAL_YEAR -> stringResource(R.string.period_spent_financial_year)
+        SpendPeriod.BILLING_CYCLE -> stringResource(R.string.period_spent_billing_cycle)
     }
 
     LazyColumn(

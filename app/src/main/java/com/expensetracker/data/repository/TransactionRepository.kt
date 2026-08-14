@@ -7,10 +7,13 @@ import com.expensetracker.data.db.dao.SettingsDao
 import com.expensetracker.data.db.dao.TransactionDao
 import com.expensetracker.data.db.entity.TransactionEntity
 import com.expensetracker.domain.insights.CategoryMonthSpend
+import com.expensetracker.domain.insights.LedgerDedupe
 import com.expensetracker.domain.insights.SelfTransferLinker
+import com.expensetracker.domain.model.HashtagParser
 import com.expensetracker.domain.model.Money
 import com.expensetracker.domain.model.PaymentMode
 import com.expensetracker.domain.model.Transaction
+import com.expensetracker.domain.model.TransactionExtras
 import com.expensetracker.domain.model.TransactionType
 import com.expensetracker.sms.parser.SmsParser
 import kotlinx.coroutines.flow.Flow
@@ -68,6 +71,7 @@ class TransactionRepositoryImpl @Inject constructor(
 ) : TransactionRepository {
 
     override suspend fun insertIfNew(tx: Transaction): Boolean {
+        if (isFuzzyDuplicate(tx)) return false
         val id = dao.insert(tx.toEntity())
         return id != -1L
     }
@@ -154,6 +158,17 @@ class TransactionRepositoryImpl @Inject constructor(
         val configured = settingsDao.get(AppSettings.OWNER_NAME)?.trim()
         return if (!configured.isNullOrEmpty()) listOf(configured) else emptyList()
     }
+
+    /**
+     * Same payment arriving as both an app notification and a bank SMS:
+     * identical (timestamp, amount, last4, merchant) within 60 seconds.
+     */
+    private suspend fun isFuzzyDuplicate(tx: Transaction): Boolean {
+        val last4 = LedgerDedupe.last4(tx) ?: return false
+        val from = tx.timestamp.minusMillis(LedgerDedupe.WINDOW_MS)
+        val to = tx.timestamp.plusMillis(LedgerDedupe.WINDOW_MS)
+        return dao.findNearDuplicate(tx.amount.amount, last4, tx.merchant, from, to) != null
+    }
 }
 
 private fun Double.toMoney(): Money =
@@ -179,6 +194,9 @@ private fun Transaction.toEntity(): TransactionEntity = TransactionEntity(
     notes = notes,
     dedupeHash = dedupeHash,
     manuallyEdited = manuallyEdited,
+    tagsJson = TransactionExtras.tagsToJson(HashtagParser.merge(notes, tags)),
+    isSplit = isSplit,
+    splitJson = TransactionExtras.splitsToJson(splitShares),
 )
 
 private fun TransactionEntity.toDomain(): Transaction = Transaction(
@@ -201,4 +219,7 @@ private fun TransactionEntity.toDomain(): Transaction = Transaction(
     notes = notes,
     dedupeHash = dedupeHash,
     manuallyEdited = manuallyEdited,
+    tags = TransactionExtras.tagsFromJson(tagsJson),
+    isSplit = isSplit,
+    splitShares = TransactionExtras.splitsFromJson(splitJson),
 )

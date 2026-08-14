@@ -13,6 +13,7 @@ import com.expensetracker.data.repository.TransactionRepository
 import com.expensetracker.domain.security.AppForegroundTracker
 import com.expensetracker.domain.security.BiometricAuthenticator
 import com.expensetracker.domain.security.PinHasher
+import com.expensetracker.sms.CardStatementIngestor
 import com.expensetracker.sms.SmsInboxScanner
 import com.expensetracker.sms.SmsScanResult
 import com.expensetracker.sms.parser.RawSms
@@ -75,6 +76,7 @@ class AppViewModel @Inject constructor(
     private val ownerNameProvider: OwnerNameProvider,
     private val parser: SmsParser,
     private val clock: Clock,
+    private val cardStatements: CardStatementIngestor,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
@@ -379,13 +381,16 @@ class AppViewModel @Inject constructor(
 
             withContext(Dispatchers.IO) {
                 chunks.forEachIndexed { index, body ->
-                    val tx = parser.parse(
-                        RawSms(
+                    val raw = RawSms(
                             sender = senderHint,
                             body = body,
                             timestamp = now.minusSeconds(index.toLong()),
-                        ),
-                    )
+                        )
+                    if (cardStatements.ingest(raw) != null) {
+                        skipped++
+                        return@forEachIndexed
+                    }
+                    val tx = parser.parse(raw)
                     if (tx == null) {
                         rejected++
                         return@forEachIndexed
