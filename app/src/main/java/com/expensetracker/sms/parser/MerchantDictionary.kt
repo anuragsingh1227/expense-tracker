@@ -50,6 +50,11 @@ object MerchantDictionary {
         Entry("PAYTM MONEY", "Paytm Money", Categories.INVESTMENT),
         Entry("ETMONEY", "ET Money", Categories.INVESTMENT),
         Entry("ET MONEY", "ET Money", Categories.INVESTMENT),
+        Entry("SCRIPBOX", "Scripbox", Categories.INVESTMENT),
+        Entry("MOTILALOSWAL", "Motilal Oswal", Categories.INVESTMENT),
+        Entry("MOTILAL OSWAL", "Motilal Oswal", Categories.INVESTMENT),
+        Entry("IPRUMF", "ICICI Prudential MF", Categories.INVESTMENT),
+        Entry("ICICI PRUDENTIAL", "ICICI Prudential MF", Categories.INVESTMENT),
         Entry("SMALLCASE", "smallcase", Categories.INVESTMENT),
         Entry("INDIANCLEARING", "NSE/BSE", Categories.INVESTMENT),
         Entry("NSCCL", "NSE Clearing", Categories.INVESTMENT),
@@ -58,6 +63,7 @@ object MerchantDictionary {
         Entry("MUTUAL FUND", "Mutual Fund", Categories.INVESTMENT),
         Entry("FOR SIP", "SIP", Categories.INVESTMENT),
         Entry("SIP OF", "SIP", Categories.INVESTMENT),
+        Entry("SIP PURCHASE", "SIP", Categories.INVESTMENT),
 
         // Shopping
         Entry("AMAZON", "Amazon", Categories.SHOPPING),

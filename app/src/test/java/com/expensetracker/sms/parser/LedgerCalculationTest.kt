@@ -238,6 +238,24 @@ class LedgerCalculationTest {
         assertThat(LocalDate.ofInstant(instant, zone)).isEqualTo(LocalDate.of(2026, 8, 5))
     }
 
+    @Test
+    fun `date extractor reads Axis compact stamp with comma and IST`() {
+        val body =
+            "INR 60000.00 credited\nA/c no. XX8291\n04-08-26, 07:32:27 IST\nUPI/P2A/024744670304/ANURAG SI/ICIC/Paym"
+        val instant = SmsDateExtractor.extractOrNull(body, zone)!!
+        assertThat(LocalDate.ofInstant(instant, zone)).isEqualTo(LocalDate.of(2026, 8, 4))
+        assertThat(instant.atZone(zone).toLocalTime()).isEqualTo(java.time.LocalTime.of(7, 32, 27))
+    }
+
+    @Test
+    fun `date extractor reads Axis compact stamp without comma`() {
+        val body =
+            "Debit INR 17383.00\nAxis Bank A/c XX8291\n15-06-26 20:43:26\nNEFT/MB/AXOMB16602145999/V"
+        val instant = SmsDateExtractor.extractOrNull(body, zone)!!
+        assertThat(LocalDate.ofInstant(instant, zone)).isEqualTo(LocalDate.of(2026, 6, 15))
+        assertThat(instant.atZone(zone).toLocalTime()).isEqualTo(java.time.LocalTime.of(20, 43, 26))
+    }
+
     private fun docsImportFallback(): String = """
 INR 52000.00 credited to A/c XXXX9876 on 01-Jul-26 by NEFT Salary. Avl Bal Rs 80,000.00
 

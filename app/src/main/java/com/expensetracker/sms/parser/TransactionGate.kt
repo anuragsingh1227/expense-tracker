@@ -88,6 +88,24 @@ object TransactionGate {
             """(?=.*\bTHANK\s+YOU\s+FOR\s+YOUR\s+PAYMENT\b)(?=.*\bCREDIT\s+CARD\b)(?=.*\bAUTO\s+DEBIT\b)""",
             RegexOption.IGNORE_CASE,
         ),
+        // Merchant / app payment receipts — the bank debit SMS is the ledger row.
+        Regex("""\bpayment\s+receipt\b""", RegexOption.IGNORE_CASE),
+        Regex("""\breceipt\s+will\s+be\s+available\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bwe\s+have\s+received\s+(?:online\s+)?payment\b""", RegexOption.IGNORE_CASE),
+        Regex("""\ba\s+payment\s+of\b.{0,40}\bis\s+updated\s+against\b""", RegexOption.IGNORE_CASE),
+        Regex("""\breceived\s+online\s+payment\s+of\b""", RegexOption.IGNORE_CASE),
+        // Broker / AMC request or initiation notices — money has not moved yet.
+        Regex("""\bwithdrawal\s+instruction\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bwithdrawal\s+request\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bplaced\s+a\s+withdrawal\b""", RegexOption.IGNORE_CASE),
+        Regex("""\brefund\b.{0,80}\bhas\s+been\s+initiated\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bhas\s+been\s+initiated\b.{0,40}\b(?:processed|working\s+days)\b""", RegexOption.IGNORE_CASE),
+        // AMC unit allotment confirmations — bank ACH/UPI debit is the investment row.
+        Regex("""\bdear\s+investor\b""", RegexOption.IGNORE_CASE),
+        Regex(
+            """(?=.*\bfolio\b)(?=.*\b(?:nav|units)\b)(?=.*\b(?:purchase|sip|processed)\b)""",
+            RegexOption.IGNORE_CASE,
+        ),
     )
 
     /**

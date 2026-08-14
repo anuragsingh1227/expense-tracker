@@ -187,15 +187,18 @@ class SmsParser(
             type == TransactionType.CREDIT && (upper.contains("SALARY") || upper.contains("SAL CR")) -> Categories.SALARY
             isSelfOrCardTransfer(upper) -> Categories.TRANSFER
             upper.contains("ATM") || upper.contains("CASH WDL") -> Categories.CASH_WITHDRAWAL
-            upper.contains("EMI") -> Categories.EMI
+            // Card banks append "convert this txn to EMI" footers — that is not an EMI debit.
+            isEmiDebit(upper) -> Categories.EMI
             upper.contains("RENT") -> Categories.RENT
             upper.contains("INSURANCE") || upper.contains("INS PREMIUM") || upper.contains("PREMIUM PAID") ->
                 Categories.INSURANCE
-            upper.contains("MUTUAL FUND") || upper.contains("SIP") || upper.contains("ZERODHA") ||
-                upper.contains("GROWW") -> Categories.INVESTMENT
+            isInvestmentNarration(upper) -> Categories.INVESTMENT
             upper.contains("RECHARGE") -> Categories.RECHARGE
             upper.contains("ELECTRICITY") || upper.contains("WATER BILL") || upper.contains("GAS BILL") ->
                 Categories.UTILITIES
+            // PPF/EPF SI credits are savings inflows to another own account — not income.
+            upper.contains("PPF") || upper.contains("EPF") || upper.contains("PROVIDENT FUND") ->
+                Categories.TRANSFER
             // One-sided NEFT/IMPS/RTGS account move with no known merchant —
             // account-to-account transfer: shown in Activity, excluded from spend.
             (upper.contains("NEFT") || upper.contains("IMPS") || upper.contains("RTGS")) &&
@@ -204,6 +207,43 @@ class SmsParser(
             type == TransactionType.CREDIT -> Categories.TRANSFER
             else -> Categories.OTHERS
         }
+    }
+
+    /** True EMI installment — not card-spend footers offering EMI conversion. */
+    private fun isEmiDebit(upper: String): Boolean {
+        if (!upper.contains("EMI")) return false
+        if (upper.contains("EMI CONVERSION") ||
+            upper.contains("CONVERT THIS TXN TO EMI") ||
+            upper.contains("CONVERT TO EMI") ||
+            upper.contains("TO EMI GIVE") ||
+            upper.contains("KNOW MORE ABOUT EMI")
+        ) {
+            return false
+        }
+        return true
+    }
+
+    /** Mutual-fund / broker / AMC purchase SMS (bank ACH or AMC confirmation). */
+    private fun isInvestmentNarration(upper: String): Boolean {
+        // PPF / EPF credits are savings movements, not spend/income — handled as Transfer below.
+        if (upper.contains("MUTUAL FUND") || upper.contains("SIP") ||
+            upper.contains("ZERODHA") || upper.contains("GROWW") ||
+            upper.contains("SCRIPBOX") || upper.contains("MOTILAL") ||
+            upper.contains("ETMONEY") || upper.contains("ET MONEY") ||
+            upper.contains("IPRUMF") || upper.contains("ICICI PRUDENTIAL")
+        ) {
+            return true
+        }
+        // AMC confirmations: "Dear Investor, Your Purchase of Rs… Folio … NAV…"
+        if (upper.contains("DEAR INVESTOR") &&
+            (upper.contains("FOLIO") || upper.contains("NAV") || upper.contains("UNITS"))
+        ) {
+            return true
+        }
+        if (upper.contains("FOLIO") && (upper.contains("PURCHASE") || upper.contains("NAV"))) {
+            return true
+        }
+        return false
     }
 
     /**
@@ -230,12 +270,15 @@ class SmsParser(
         if (Regex("""ACCT\s+XX\d+\s+DEBITED.*ACCT\s+XX\d+\s+CREDITED""").containsMatchIn(upper)) {
             return true
         }
-        // Owner-name hint on a bank transfer SMS → own-account move.
+        // Owner-name hint on a bank/UPI transfer SMS → own-account move.
+        // ICICI: "Acct XX293 debited for Rs X; ANURAG SINGH credited. UPI:…"
+        // Axis:  "UPI/P2A/…/ANURAG SI/ICIC/Paym"
         val names = ownerNames().map { it.trim() }.filter { it.length >= 2 }
         if (names.isNotEmpty() &&
             names.any { name -> upper.contains(name.uppercase()) } &&
             (upper.contains("NEFT") || upper.contains("IMPS") || upper.contains("RTGS") ||
-                upper.contains("TRANSFERRED") || upper.contains("TRANSFER"))
+                upper.contains("TRANSFERRED") || upper.contains("TRANSFER") ||
+                upper.contains("UPI") || upper.contains("P2A"))
         ) {
             return true
         }
@@ -322,6 +365,8 @@ class SmsParser(
         private val REFERENCE_PATTERNS = listOf(
             Regex("""(?i)(?:ref(?:erence)?(?:\s*no)?\.?|txn(?:\s*id)?\.?|utr)[:\s#]*([A-Z0-9]{6,})"""),
             Regex("""(?i)UPI(?:\s*ref)?[:\s]*([0-9]{9,})"""),
+            // Axis inbound UPI self-credit: "UPI/P2A/024744670304/ANURAG SI/ICIC/Paym"
+            Regex("""(?i)UPI/[A-Z0-9]{1,6}/([0-9]{9,})"""),
             // Axis NEFT/IMPS compact template: "NEFT/MB/AXOMB16602145999/V"
             Regex("""(?i)(?:NEFT|IMPS|RTGS)/[A-Z]{1,3}/([A-Z0-9]{8,})"""),
             // Axis card-payment compact template: "CRD-PMNT-530562****0887"

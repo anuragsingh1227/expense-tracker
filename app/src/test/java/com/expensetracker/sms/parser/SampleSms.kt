@@ -148,6 +148,42 @@ object SampleSms {
     const val OWN_ACCOUNT_NEFT_CREDIT_ANURAG =
         "Credit INR 17383.00\nICICI Bank A/c XX293\n15-06-26 20:45:10\nNEFT/MB/AXOMB16602145999/V ANURAG SINGH"
 
+    /** ICICI UPI self-transfer debit — owner credited on the same SMS. */
+    const val ICICI_UPI_SELF_TRANSFER_ANURAG =
+        "ICICI Bank Acct XX293 debited for Rs 60000.00 on 04-Aug-26; ANURAG SINGH credited. UPI:024744670304. Call 18002662 for dispute. SMS BLOCK 293 to 9215676766."
+
+    /** Matching Axis credit leg for the ICICI UPI self-transfer above. */
+    const val AXIS_UPI_P2A_CREDIT_ANURAG =
+        "INR 60000.00 credited\nA/c no. XX8291\n04-08-26, 07:32:27 IST\nUPI/P2A/024744670304/ANURAG SI/ICIC/Paym - Axis Bank"
+
+    /** Motilal Oswal MF UPI debit — investment, not spend. */
+    const val ICICI_UPI_MOTILAL_MF =
+        "ICICI Bank Acct XX293 debited for Rs 40000.00 on 03-Aug-26; MotilalOswalMF credited. UPI:479986606620. Call 18002662 for dispute. SMS BLOCK 293 to 9215676766."
+
+    /** Scripbox wealth ACH debit — investment. */
+    const val AXIS_ACH_SCRIPBOX =
+        "Debit INR 43200.00\nAxis Bank A/c XX8291\n10-08-26 08:41:31\nACH-DR-SCRIPBOXWEALTHMANAG\nWhatsApp BAL to 917036165000\nNot You? SMS BLOCKALL CustID to 919951860002"
+
+    /** Card spend that also advertises EMI conversion — must stay spend, not EMI. */
+    const val ICICI_CARD_SPEND_EMI_FOOTER =
+        "Rs 10,924.20 spent on ICICI Bank Card XX7002 on 12-Aug-26 at UPI-42064733520. Avl Lmt: Rs 2,05,414.17. To dispute, call 18002662/SMS BLOCK 7002 to 9215676766. To convert this txn to EMI give a missed call on 9924667667. Know more about EMI conversion at https://icici.co/ICICIT/j/9e2c0243"
+
+    /** Airtel merchant receipt — duplicate of bank debit; must be ignored. */
+    const val AIRTEL_PAYMENT_RECEIPT =
+        "Hi Anurag Singh, we have received payment of Rs. 228.18 for your Airtel mobile 919716073383. To download the payment receipt, click https://example.com/receipt.\nThis receipt will be available to download for 7 days."
+
+    /** Scripbox withdrawal instruction — not a completed bank debit. */
+    const val SCRIPBOX_WITHDRAWAL_INSTRUCTION =
+        "Your withdrawal instruction of Rs 52036.55 has been successfully processed.-Team Scripbox"
+
+    /** AMC unit allotment — bank ACH is the investment row; this is informational. */
+    const val IPRUMF_PURCHASE_CONFIRMATION =
+        "Dear Investor, Your Purchase of Rs.43,197.84 in Folio 44796240 in Large Cap Fund (erstwhile Bluechip Fund) - Growth for 392.137 units has been processed for NAV of 110.16 on 11-Aug-2026. Account statement will be sent to your registered email address within 2 working days- IPRUMF"
+
+    /** Swiggy refund initiation — wait for the bank credit SMS. */
+    const val SWIGGY_REFUND_INITIATED =
+        "Refund of Rs 478.0 has been initiated for Swiggy order 245081078136287. Updated balance should reflect in 4-7 days. https://r.swiggy.com/refunds"
+
     /**
      * Card-side "thank you for payment" confirmation of a credit-card auto-debit —
      * duplicates the bank-side debit SMS below; must be ignored entirely.
