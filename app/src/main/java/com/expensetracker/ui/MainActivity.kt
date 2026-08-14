@@ -148,6 +148,7 @@ private fun AppRoot(
             message = ctx.getString(
                 R.string.sms_text_import_result,
                 result.inserted,
+                result.statements,
                 result.skipped,
                 result.rejected,
             ),
@@ -250,6 +251,7 @@ private fun AppRoot(
                 DashboardScreen(
                     onOpenTransaction = { nav.navigate("transaction/$it") },
                     onOpenSettings = { nav.navigate(Tab.Settings.route) },
+                    onOpenAdd = { nav.navigate("add_transaction") },
                     amountsHidden = amountsHidden,
                     onToggleAmountsHidden = { appViewModel.toggleAmountsHidden() },
                 )
@@ -258,6 +260,8 @@ private fun AppRoot(
                 TransactionsScreen(
                     onOpenTransaction = { nav.navigate("transaction/$it") },
                     onAddTransaction = { nav.navigate("add_transaction") },
+                    amountsHidden = amountsHidden,
+                    onToggleAmountsHidden = { appViewModel.toggleAmountsHidden() },
                 )
             }
             composable(Tab.Settings.route) {
@@ -293,6 +297,8 @@ private fun AppRoot(
                         appViewModel.disableAppLock(current, onResult)
                     },
                     onSetAppLockBiometricEnabled = { appViewModel.setAppLockBiometricEnabled(it) },
+                    amountsHidden = amountsHidden,
+                    onToggleAmountsHidden = { appViewModel.toggleAmountsHidden() },
                     onPermissionsChanged = {
                         permissionsGranted = true
                         if (AppFeatures.autoSms) {

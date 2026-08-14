@@ -63,6 +63,7 @@ import com.expensetracker.domain.model.TransactionType
 import com.expensetracker.sms.parser.Categories
 import com.expensetracker.sms.parser.LabelRuleCatalog
 import com.expensetracker.sms.parser.MerchantCatalog
+import com.expensetracker.ui.components.DatePickerField
 import com.expensetracker.ui.components.LoadingBlock
 import com.expensetracker.ui.components.MetaRow
 import com.expensetracker.ui.components.StatusPill
@@ -283,10 +284,8 @@ fun TransactionDetailScreen(
         var merchantText by remember(current.id, current.merchant) {
             mutableStateOf(current.merchant.orEmpty())
         }
-        var dateText by remember(current.id, current.timestamp) {
-            mutableStateOf(
-                current.timestamp.atZone(ZoneId.systemDefault()).toLocalDate().toString(),
-            )
+        var date by remember(current.id, current.timestamp) {
+            mutableStateOf(current.timestamp.atZone(ZoneId.systemDefault()).toLocalDate())
         }
         var rememberMerchant by remember(current.id) { mutableStateOf(true) }
 
@@ -385,15 +384,7 @@ fun TransactionDetailScreen(
                     shape = RoundedCornerShape(14.dp),
                 )
                 Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = dateText,
-                    onValueChange = { dateText = it },
-                    label = { Text(stringResource(R.string.label_date)) },
-                    supportingText = { Text(stringResource(R.string.label_date_hint)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                )
+                DatePickerField(date = date, onDateChange = { date = it })
             }
 
             SurfaceCard {
@@ -703,14 +694,10 @@ fun TransactionDetailScreen(
                         val parsedAmount = runCatching {
                             Money.ofRupees(amountText.trim())
                         }.getOrNull()
-                        val parsedDate = runCatching {
-                            LocalDate.parse(dateText.trim())
-                        }.getOrNull()
                         if (parsedAmount == null || parsedAmount.amount.signum() <= 0) return@Button
-                        if (parsedDate == null) return@Button
                         val zone = ZoneId.systemDefault()
                         val oldLocal = current.timestamp.atZone(zone)
-                        val newTimestamp = parsedDate
+                        val newTimestamp = date
                             .atTime(oldLocal.toLocalTime())
                             .atZone(zone)
                             .toInstant()

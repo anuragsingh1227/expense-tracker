@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.expensetracker.data.AppSettings
 import com.expensetracker.data.db.dao.SettingsDao
+import com.expensetracker.data.repository.CardStatementRepository
 import com.expensetracker.data.repository.CategorySpend
 import com.expensetracker.data.repository.TransactionRepository
 import com.expensetracker.domain.insights.CategoryMomChange
@@ -11,6 +12,7 @@ import com.expensetracker.domain.insights.CategoryMonthSpend
 import com.expensetracker.domain.insights.SpendInsights
 import com.expensetracker.domain.insights.SpendMath
 import com.expensetracker.domain.insights.StackMonthColumn
+import com.expensetracker.domain.model.CardStatement
 import com.expensetracker.domain.model.Money
 import com.expensetracker.domain.model.Transaction
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -42,6 +44,7 @@ data class DashboardState(
     val momPreviousLabel: String = "",
     val momPartial: Boolean = false,
     val stack: List<StackMonthColumn> = emptyList(),
+    val upcomingDues: List<CardStatement> = emptyList(),
 ) {
     /** Income − spend − investments (transfers ignored). */
     val net: Money get() = SpendMath.netCashFlow(income, spend, investments)
@@ -64,6 +67,7 @@ private data class PeriodInsights(
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val repository: TransactionRepository,
+    private val statements: CardStatementRepository,
     private val settingsDao: SettingsDao,
     private val clock: Clock,
 ) : ViewModel() {
@@ -116,7 +120,8 @@ class DashboardViewModel @Inject constructor(
                 )
             }
 
-            combine(core, insights) { c, i ->
+            combine(core, insights, statements.observeAll()) { c, i, dues ->
+                val today = LocalDate.now(clock)
                 DashboardState(
                     period = period,
                     rangeLabel = window.labelRange,
@@ -130,6 +135,7 @@ class DashboardViewModel @Inject constructor(
                     momPreviousLabel = compare.previousLabel,
                     momPartial = compare.currentIsPartial,
                     stack = i.stack,
+                    upcomingDues = dues.filter { !it.dueDate.isBefore(today) }.take(3),
                 )
             }
         }

@@ -49,6 +49,7 @@ data class SmsTextImportResult(
     val inserted: Int,
     val skipped: Int,
     val rejected: Int,
+    val statements: Int = 0,
 )
 
 /**
@@ -396,6 +397,7 @@ class AppViewModel @Inject constructor(
             var inserted = 0
             var skipped = 0
             var rejected = 0
+            var statements = 0
             val now = Instant.now(clock)
 
             withContext(Dispatchers.IO) {
@@ -406,7 +408,7 @@ class AppViewModel @Inject constructor(
                             timestamp = now.minusSeconds(index.toLong()),
                         )
                     if (cardStatements.ingest(sms) != null) {
-                        skipped++
+                        statements++
                         return@forEachIndexed
                     }
                     val tx = parser.parse(sms)
@@ -423,6 +425,7 @@ class AppViewModel @Inject constructor(
                 inserted = inserted,
                 skipped = skipped,
                 rejected = rejected,
+                statements = statements,
             )
         }
     }

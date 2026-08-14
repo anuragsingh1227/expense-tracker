@@ -265,6 +265,8 @@ fun EmptyState(
     body: String,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
+    secondaryActionLabel: String? = null,
+    onSecondaryAction: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -303,6 +305,14 @@ fun EmptyState(
                 modifier = Modifier.heightIn(min = 48.dp),
             ) {
                 Text(actionLabel)
+            }
+        }
+        if (secondaryActionLabel != null && onSecondaryAction != null) {
+            TextButton(
+                onClick = onSecondaryAction,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
+                Text(secondaryActionLabel)
             }
         }
     }
@@ -387,8 +397,14 @@ fun TransactionListItem(
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(2.dp))
+            val meta = buildList {
+                add(tx.category)
+                if (tx.isSplit) add(stringResource(R.string.list_split_badge))
+                tx.tags.firstOrNull()?.let { add("#$it") }
+                add(date)
+            }.joinToString(" · ")
             Text(
-                "${tx.category} · $date",
+                meta,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

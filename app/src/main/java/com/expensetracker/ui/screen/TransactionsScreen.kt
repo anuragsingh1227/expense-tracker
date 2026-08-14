@@ -10,25 +10,23 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -61,7 +59,7 @@ import com.expensetracker.domain.insights.PeerBalance
 import com.expensetracker.domain.insights.SplitLedger
 import com.expensetracker.domain.model.Money
 import com.expensetracker.domain.model.Transaction
-import com.expensetracker.sms.parser.Categories
+import com.expensetracker.ui.components.AmountVisibilityToggle
 import com.expensetracker.ui.components.EmptyState
 import com.expensetracker.ui.components.PeriodFilterRow
 import com.expensetracker.ui.components.ScreenHeader
@@ -88,6 +86,7 @@ data class ActivityUiState(
     val categoryFilter: String? = null,
     val bankFilter: String? = null,
     val availableBanks: List<String> = emptyList(),
+    val availableCategories: List<String> = emptyList(),
     val peerBalances: List<PeerBalance> = emptyList(),
 )
 
@@ -129,6 +128,10 @@ class TransactionsViewModel @Inject constructor(
                 val banks = list.mapNotNull { it.bank?.takeIf(String::isNotBlank) }
                     .distinct()
                     .sorted()
+                val categories = list.map { it.category }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .sorted()
                 val filtered = list.filter { tx ->
                     (filters.category == null || tx.category == filters.category) &&
                         (filters.bank == null || tx.bank == filters.bank)
@@ -140,6 +143,7 @@ class TransactionsViewModel @Inject constructor(
                     categoryFilter = filters.category,
                     bankFilter = filters.bank,
                     availableBanks = banks,
+                    availableCategories = categories,
                     peerBalances = debts,
                 )
             }
@@ -178,21 +182,12 @@ class TransactionsViewModel @Inject constructor(
     )
 }
 
-private val FILTER_CATEGORIES = listOf(
-    Categories.FOOD,
-    Categories.GROCERIES,
-    Categories.SHOPPING,
-    Categories.TRAVEL,
-    Categories.TRANSPORT,
-    Categories.UTILITIES,
-    Categories.TRANSFER,
-    Categories.OTHERS,
-)
-
 @Composable
 fun TransactionsScreen(
     onOpenTransaction: (Long) -> Unit,
     onAddTransaction: () -> Unit = {},
+    amountsHidden: Boolean = false,
+    onToggleAmountsHidden: () -> Unit = {},
     viewModel: TransactionsViewModel = hiltViewModel(),
 ) {
     var query by remember { mutableStateOf("") }
@@ -212,6 +207,14 @@ fun TransactionsScreen(
         val visibleIds = state.transactions.mapTo(mutableSetOf()) { it.id }
         val pruned = selectedIds.intersect(visibleIds)
         if (pruned != selectedIds) selectedIds = pruned
+    }
+    LaunchedEffect(state.availableCategories, state.categoryFilter) {
+        val selected = state.categoryFilter ?: return@LaunchedEffect
+        if (selected !in state.availableCategories) viewModel.setCategoryFilter(null)
+    }
+    LaunchedEffect(state.availableBanks, state.bankFilter) {
+        val selected = state.bankFilter ?: return@LaunchedEffect
+        if (selected !in state.availableBanks) viewModel.setBankFilter(null)
     }
 
     fun toggleSelected(id: Long) {
@@ -296,50 +299,51 @@ fun TransactionsScreen(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
                         stringResource(R.string.selection_count, selectedIds.size),
                         style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { selectedIds = emptySet() }) {
-                            Text(stringResource(R.string.action_cancel))
-                        }
-                        OutlinedButton(
-                            onClick = { confirmDelete = true },
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error,
-                            ),
-                        ) {
-                            Icon(
-                                Icons.Outlined.Delete,
-                                contentDescription = null,
-                                modifier = Modifier.height(18.dp),
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(stringResource(R.string.action_delete))
-                        }
-                        Button(onClick = ::copySelected) {
-                            Icon(
-                                Icons.Outlined.ContentCopy,
-                                contentDescription = null,
-                                modifier = Modifier.height(18.dp),
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(stringResource(R.string.action_copy_sms))
-                        }
+                    IconButton(onClick = { selectedIds = emptySet() }) {
+                        Icon(
+                            Icons.Outlined.Close,
+                            contentDescription = stringResource(R.string.activity_select_cancel_a11y),
+                        )
+                    }
+                    IconButton(onClick = { confirmDelete = true }) {
+                        Icon(
+                            Icons.Outlined.Delete,
+                            contentDescription = stringResource(R.string.activity_select_delete_a11y),
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    IconButton(onClick = ::copySelected) {
+                        Icon(
+                            Icons.Outlined.ContentCopy,
+                            contentDescription = stringResource(R.string.activity_select_copy_a11y),
+                        )
                     }
                 }
             } else {
-                ScreenHeader(
-                    title = stringResource(R.string.tab_transactions),
-                    subtitle = if (state.rangeLabel.isNotBlank()) {
-                        state.rangeLabel
-                    } else {
-                        stringResource(R.string.transactions_subtitle)
-                    },
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ScreenHeader(
+                        title = stringResource(R.string.tab_transactions),
+                        subtitle = if (state.rangeLabel.isNotBlank()) {
+                            state.rangeLabel
+                        } else {
+                            stringResource(R.string.transactions_subtitle)
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    AmountVisibilityToggle(
+                        amountsHidden = amountsHidden,
+                        onToggle = onToggleAmountsHidden,
+                    )
+                }
             }
             Spacer(Modifier.height(14.dp))
             PeriodFilterRow(
@@ -352,6 +356,7 @@ fun TransactionsScreen(
             }
             Spacer(Modifier.height(10.dp))
             CategoryFilterRow(
+                categories = state.availableCategories,
                 selected = state.categoryFilter,
                 onSelect = viewModel::setCategoryFilter,
             )
@@ -371,7 +376,7 @@ fun TransactionsScreen(
                     viewModel.setQuery(it)
                 },
                 singleLine = true,
-                label = { Text(stringResource(R.string.search_hint)) },
+                placeholder = { Text(stringResource(R.string.search_placeholder)) },
                 leadingIcon = {
                     Icon(
                         Icons.Outlined.Search,
@@ -400,6 +405,8 @@ fun TransactionsScreen(
                         icon = Icons.Outlined.SearchOff,
                         title = stringResource(R.string.empty_transactions_title),
                         body = stringResource(R.string.empty_period_transactions),
+                        actionLabel = stringResource(R.string.empty_dashboard_add),
+                        onAction = onAddTransaction,
                     )
                 }
                 else -> {
@@ -458,9 +465,11 @@ private fun DebtsCard(balances: List<PeerBalance>) {
 
 @Composable
 private fun CategoryFilterRow(
+    categories: List<String>,
     selected: String?,
     onSelect: (String?) -> Unit,
 ) {
+    if (categories.isEmpty()) return
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -472,7 +481,7 @@ private fun CategoryFilterRow(
             onClick = { onSelect(null) },
             label = { Text(stringResource(R.string.filter_all_categories)) },
         )
-        FILTER_CATEGORIES.forEach { cat ->
+        categories.forEach { cat ->
             FilterChip(
                 selected = selected == cat,
                 onClick = { onSelect(if (selected == cat) null else cat) },

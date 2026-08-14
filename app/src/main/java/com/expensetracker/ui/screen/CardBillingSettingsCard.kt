@@ -7,11 +7,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,7 +19,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -102,19 +98,6 @@ fun CardBillingSettingsCard(
             onValueChangeFinished = { viewModel.setStartDay(sliderDay) },
             valueRange = 1f..28f,
             steps = 26,
-        )
-        OutlinedTextField(
-            value = sliderDay.toString(),
-            onValueChange = { raw ->
-                val parsed = raw.filter { it.isDigit() }.toIntOrNull() ?: return@OutlinedTextField
-                sliderDay = parsed.coerceIn(1, 28)
-                viewModel.setStartDay(sliderDay)
-            },
-            label = { Text(stringResource(R.string.settings_billing_cycle_day_label)) },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
         )
     }
 

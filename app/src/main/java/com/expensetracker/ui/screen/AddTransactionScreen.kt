@@ -47,6 +47,7 @@ import com.expensetracker.domain.model.PaymentMode
 import com.expensetracker.domain.model.Transaction
 import com.expensetracker.domain.model.TransactionType
 import com.expensetracker.sms.parser.Categories
+import com.expensetracker.ui.components.DatePickerField
 import com.expensetracker.ui.components.SurfaceCard
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
@@ -120,7 +121,7 @@ fun AddTransactionScreen(
     var type by remember { mutableStateOf(TransactionType.DEBIT) }
     var merchant by remember { mutableStateOf("") }
     var category by remember { mutableStateOf(Categories.OTHERS) }
-    var dateText by remember { mutableStateOf(LocalDate.now().toString()) }
+    var date by remember { mutableStateOf(LocalDate.now()) }
     var notes by remember { mutableStateOf("") }
 
     val amountValid = remember(amountText) {
@@ -129,10 +130,7 @@ fun AddTransactionScreen(
             m.amount.signum() > 0
         }.getOrDefault(false)
     }
-    val dateParsed = remember(dateText) {
-        runCatching { LocalDate.parse(dateText.trim()) }.getOrNull()
-    }
-    val canSave = amountValid && dateParsed != null && category.isNotBlank()
+    val canSave = amountValid && category.isNotBlank()
 
     Scaffold(
         topBar = {
@@ -202,21 +200,13 @@ fun AddTransactionScreen(
                     shape = RoundedCornerShape(14.dp),
                 )
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = dateText,
-                    onValueChange = { dateText = it },
-                    label = { Text(stringResource(R.string.label_date)) },
-                    supportingText = { Text(stringResource(R.string.label_date_hint)) },
-                    singleLine = true,
-                    isError = dateParsed == null && dateText.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                )
+                DatePickerField(date = date, onDateChange = { date = it })
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
                     label = { Text(stringResource(R.string.label_notes)) },
+                    supportingText = { Text(stringResource(R.string.label_notes_hashtag_hint)) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
                     minLines = 2,
@@ -239,7 +229,6 @@ fun AddTransactionScreen(
 
             Button(
                 onClick = {
-                    val date = dateParsed ?: return@Button
                     viewModel.save(
                         amountText = amountText,
                         type = type,
