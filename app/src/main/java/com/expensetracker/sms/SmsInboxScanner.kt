@@ -32,6 +32,7 @@ class SmsInboxScanner @Inject constructor(
     private val repository: TransactionRepository,
     private val settingsDao: SettingsDao,
     private val clock: Clock,
+    private val cardStatements: CardStatementIngestor,
 ) {
 
     suspend fun scan(forceFullLookback: Boolean = false): SmsScanResult {
@@ -51,6 +52,10 @@ class SmsInboxScanner @Inject constructor(
                 var inserted = 0
                 var skipped = 0
                 for (raw in read.messages) {
+                    if (cardStatements.ingest(raw) != null) {
+                        skipped++
+                        continue
+                    }
                     if (!parser.isTransactional(raw.body)) {
                         skipped++
                         continue

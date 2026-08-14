@@ -54,13 +54,20 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.expensetracker.R
+import com.expensetracker.data.AppSettings
+import com.expensetracker.data.db.dao.SettingsDao
 import com.expensetracker.data.repository.TransactionRepository
+import com.expensetracker.domain.insights.PeerBalance
+import com.expensetracker.domain.insights.SplitLedger
+import com.expensetracker.domain.model.Money
 import com.expensetracker.domain.model.Transaction
 import com.expensetracker.sms.parser.Categories
 import com.expensetracker.ui.components.EmptyState
 import com.expensetracker.ui.components.PeriodFilterRow
 import com.expensetracker.ui.components.ScreenHeader
+import com.expensetracker.ui.components.SurfaceCard
 import com.expensetracker.ui.components.TransactionListItem
+import com.expensetracker.ui.components.maskableFormatInr
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -81,12 +88,14 @@ data class ActivityUiState(
     val categoryFilter: String? = null,
     val bankFilter: String? = null,
     val availableBanks: List<String> = emptyList(),
+    val peerBalances: List<PeerBalance> = emptyList(),
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class TransactionsViewModel @Inject constructor(
     private val repository: TransactionRepository,
+    private val settingsDao: SettingsDao,
     private val clock: Clock,
 ) : ViewModel() {
 
@@ -94,36 +103,46 @@ class TransactionsViewModel @Inject constructor(
     private val periodFlow = MutableStateFlow(SpendPeriod.MONTH)
     private val categoryFilterFlow = MutableStateFlow<String?>(null)
     private val bankFilterFlow = MutableStateFlow<String?>(null)
+    private val billingDayFlow = settingsDao.observe(AppSettings.CC_BILLING_CYCLE_START_DAY)
+        .map { it?.toIntOrNull()?.coerceIn(1, 28) ?: 1 }
 
     val state: StateFlow<ActivityUiState> = combine(
         queryFlow,
         periodFlow,
         categoryFilterFlow,
         bankFilterFlow,
-        dateBoundaryFlow(clock),
-    ) { query, period, category, bank, _ ->
-        ActivityFilters(query, period, category, bank)
+        billingDayFlow,
+    ) { query, period, category, bank, billingDay ->
+        ActivityFilters(query, period, category, bank, billingDay)
     }
+        .combine(dateBoundaryFlow(clock)) { filters, _ -> filters }
         .flatMapLatest { filters ->
-            val window = DashboardRanges.forPeriod(filters.period, clock)
-            repository.searchBetween(filters.query, window.fromInclusive, window.toExclusive)
-                .map { list ->
-                    val banks = list.mapNotNull { it.bank?.takeIf(String::isNotBlank) }
-                        .distinct()
-                        .sorted()
-                    val filtered = list.filter { tx ->
-                        (filters.category == null || tx.category == filters.category) &&
-                            (filters.bank == null || tx.bank == filters.bank)
-                    }
-                    ActivityUiState(
-                        period = filters.period,
-                        rangeLabel = window.labelRange,
-                        transactions = filtered,
-                        categoryFilter = filters.category,
-                        bankFilter = filters.bank,
-                        availableBanks = banks,
-                    )
+            val window = DashboardRanges.forPeriod(
+                filters.period,
+                clock,
+                billingCycleStartDay = filters.billingDay,
+            )
+            combine(
+                repository.searchBetween(filters.query, window.fromInclusive, window.toExclusive),
+                repository.observeAll().map { SplitLedger.balances(it) },
+            ) { list, debts ->
+                val banks = list.mapNotNull { it.bank?.takeIf(String::isNotBlank) }
+                    .distinct()
+                    .sorted()
+                val filtered = list.filter { tx ->
+                    (filters.category == null || tx.category == filters.category) &&
+                        (filters.bank == null || tx.bank == filters.bank)
                 }
+                ActivityUiState(
+                    period = filters.period,
+                    rangeLabel = window.labelRange,
+                    transactions = filtered,
+                    categoryFilter = filters.category,
+                    bankFilter = filters.bank,
+                    availableBanks = banks,
+                    peerBalances = debts,
+                )
+            }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ActivityUiState())
 
@@ -155,6 +174,7 @@ class TransactionsViewModel @Inject constructor(
         val period: SpendPeriod,
         val category: String?,
         val bank: String?,
+        val billingDay: Int,
     )
 }
 
@@ -326,6 +346,10 @@ fun TransactionsScreen(
                 selected = state.period,
                 onSelect = viewModel::setPeriod,
             )
+            if (state.peerBalances.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                DebtsCard(balances = state.peerBalances)
+            }
             Spacer(Modifier.height(10.dp))
             CategoryFilterRow(
                 selected = state.categoryFilter,
@@ -397,6 +421,37 @@ fun TransactionsScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DebtsCard(balances: List<PeerBalance>) {
+    val owedToMe = SplitLedger.totalOwedToMe(balances)
+    SurfaceCard {
+        Text(
+            stringResource(R.string.debts_title),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            stringResource(R.string.debts_subtitle, owedToMe.maskableFormatInr()),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(10.dp))
+        balances.forEach { row ->
+            val label = if (row.owedToMe.amount.signum() >= 0) {
+                stringResource(R.string.debts_owes_me, row.name, row.owedToMe.maskableFormatInr())
+            } else {
+                stringResource(
+                    R.string.debts_i_owe,
+                    row.name,
+                    Money(row.owedToMe.amount.abs()).maskableFormatInr(),
+                )
+            }
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(4.dp))
         }
     }
 }

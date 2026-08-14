@@ -60,6 +60,40 @@ class DashboardRangesTest {
     }
 
     @Test
+    fun `Indian financial year in August is Apr 1 this year to Mar 31 next`() {
+        val clock = Clock.fixed(Instant.parse("2026-08-14T04:30:00Z"), zone)
+        val window = DashboardRanges.forPeriod(SpendPeriod.FINANCIAL_YEAR, clock)
+        assertThat(window.fromInclusive).isEqualTo(LocalDate.of(2026, 4, 1).atStartOfDay(zone).toInstant())
+        assertThat(window.toExclusive).isEqualTo(LocalDate.of(2027, 4, 1).atStartOfDay(zone).toInstant())
+        assertThat(window.labelRange).contains("1 Apr")
+        assertThat(window.labelRange).contains("31 Mar")
+    }
+
+    @Test
+    fun `Indian financial year in February is previous April`() {
+        val clock = Clock.fixed(Instant.parse("2026-02-10T04:30:00Z"), zone)
+        val window = DashboardRanges.forPeriod(SpendPeriod.FINANCIAL_YEAR, clock)
+        assertThat(window.fromInclusive).isEqualTo(LocalDate.of(2025, 4, 1).atStartOfDay(zone).toInstant())
+        assertThat(window.toExclusive).isEqualTo(LocalDate.of(2026, 4, 1).atStartOfDay(zone).toInstant())
+    }
+
+    @Test
+    fun `billing cycle 15th to 14th uses previous 15th when today is the 10th`() {
+        val clock = Clock.fixed(Instant.parse("2026-08-10T04:30:00Z"), zone)
+        val window = DashboardRanges.forPeriod(SpendPeriod.BILLING_CYCLE, clock, billingCycleStartDay = 15)
+        assertThat(window.fromInclusive).isEqualTo(LocalDate.of(2026, 7, 15).atStartOfDay(zone).toInstant())
+        assertThat(window.toExclusive).isEqualTo(LocalDate.of(2026, 8, 11).atStartOfDay(zone).toInstant())
+    }
+
+    @Test
+    fun `billing cycle 15th to 14th starts this month after the 15th`() {
+        val clock = Clock.fixed(Instant.parse("2026-08-20T04:30:00Z"), zone)
+        val window = DashboardRanges.forPeriod(SpendPeriod.BILLING_CYCLE, clock, billingCycleStartDay = 15)
+        assertThat(window.fromInclusive).isEqualTo(LocalDate.of(2026, 8, 15).atStartOfDay(zone).toInstant())
+        assertThat(window.toExclusive).isEqualTo(LocalDate.of(2026, 8, 21).atStartOfDay(zone).toInstant())
+    }
+
+    @Test
     fun `monthCompareWindows marks partial current month`() {
         val clock = Clock.fixed(Instant.parse("2024-03-14T20:00:00Z"), zone)
         val compare = DashboardRanges.monthCompareWindows(clock)

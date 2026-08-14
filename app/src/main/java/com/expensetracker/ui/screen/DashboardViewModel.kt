@@ -2,6 +2,8 @@ package com.expensetracker.ui.screen
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.expensetracker.data.AppSettings
+import com.expensetracker.data.db.dao.SettingsDao
 import com.expensetracker.data.repository.CategorySpend
 import com.expensetracker.data.repository.TransactionRepository
 import com.expensetracker.domain.insights.CategoryMomChange
@@ -21,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.time.Clock
 import java.time.LocalDate
@@ -61,17 +64,21 @@ private data class PeriodInsights(
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val repository: TransactionRepository,
+    private val settingsDao: SettingsDao,
     private val clock: Clock,
 ) : ViewModel() {
 
     private val periodFlow = MutableStateFlow(SpendPeriod.MONTH)
+    private val billingDayFlow = settingsDao.observe(AppSettings.CC_BILLING_CYCLE_START_DAY)
+        .map { it?.toIntOrNull()?.coerceIn(1, 28) ?: 1 }
 
     val state: StateFlow<DashboardState> = combine(
         periodFlow,
+        billingDayFlow,
         dateBoundaryFlow(clock),
-    ) { period, _ -> period }
-        .flatMapLatest { period ->
-            val window = DashboardRanges.forPeriod(period, clock)
+    ) { period, billingDay, _ -> period to billingDay }
+        .flatMapLatest { (period, billingDay) ->
+            val window = DashboardRanges.forPeriod(period, clock, billingCycleStartDay = billingDay)
             val compare = DashboardRanges.monthCompareWindows(clock)
             val stackWindow = DashboardRanges.lastThreeMonthsWindow(clock)
             val monthKeys = DashboardRanges.monthKeysForLastThree(clock)

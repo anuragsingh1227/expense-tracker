@@ -73,7 +73,10 @@ class BackupRepository @Inject constructor(
                     .put("narration", tx.narration)
                     .put("notes", tx.notes)
                     .put("dedupeHash", tx.dedupeHash)
-                    .put("manuallyEdited", tx.manuallyEdited),
+                    .put("manuallyEdited", tx.manuallyEdited)
+                    .put("isSplit", tx.isSplit)
+                    .put("tags", tagsArray(tx.tagsJson))
+                    .put("splitShares", splitArray(tx.splitJson)),
             )
         }
         root.put("transactions", txArray)
@@ -145,9 +148,7 @@ class BackupRepository @Inject constructor(
     }
 
     suspend fun importJson(json: String): BackupImportResult {
-        val root = JSONObject(json)
-        val version = root.optInt("version", 1)
-        require(version in 1..VERSION) { "Unsupported backup version $version" }
+        val root = BackupSchema.validate(json)
 
         var inserted = 0
         var skipped = 0
@@ -174,6 +175,9 @@ class BackupRepository @Inject constructor(
                 notes = o.optStringOrNull("notes"),
                 dedupeHash = o.getString("dedupeHash"),
                 manuallyEdited = o.optBoolean("manuallyEdited", false),
+                tagsJson = o.optTagsJson(),
+                isSplit = o.optBoolean("isSplit", false),
+                splitJson = o.optSplitJson(),
             )
             val id = transactionDao.insert(entity)
             if (id != -1L) inserted++ else skipped++
@@ -252,7 +256,7 @@ class BackupRepository @Inject constructor(
     }
 
     companion object {
-        const val VERSION = 3
+        const val VERSION = 4
         const val MIME_TYPE = "application/json"
         const val CSV_MIME_TYPE = "text/csv"
         const val FILE_PREFIX = "expense-tracker-backup"
@@ -266,6 +270,7 @@ class BackupRepository @Inject constructor(
             AppSettings.APP_LOCK_PIN_SALT,
             AppSettings.APP_LOCK_BIOMETRIC_ENABLED,
             AppSettings.AMOUNTS_HIDDEN,
+            AppSettings.CC_BILLING_CYCLE_START_DAY,
         )
     }
 }
@@ -283,4 +288,24 @@ private fun JSONObject.optStringOrNull(key: String): String? {
     if (!has(key) || isNull(key)) return null
     val value = optString(key, "")
     return value.takeIf { it.isNotEmpty() && it != "null" }
+}
+
+private fun tagsArray(tagsJson: String?): JSONArray {
+    if (tagsJson.isNullOrBlank()) return JSONArray()
+    return runCatching { JSONArray(tagsJson) }.getOrDefault(JSONArray())
+}
+
+private fun splitArray(splitJson: String?): JSONArray {
+    if (splitJson.isNullOrBlank()) return JSONArray()
+    return runCatching { JSONArray(splitJson) }.getOrDefault(JSONArray())
+}
+
+private fun JSONObject.optTagsJson(): String? {
+    val arr = optJSONArray("tags") ?: return optStringOrNull("tagsJson")
+    return if (arr.length() == 0) null else arr.toString()
+}
+
+private fun JSONObject.optSplitJson(): String? {
+    val arr = optJSONArray("splitShares") ?: return optStringOrNull("splitJson")
+    return if (arr.length() == 0) null else arr.toString()
 }

@@ -200,6 +200,7 @@ fun SettingsScreen(
         }
 
         BudgetsSettingsCard()
+        CardBillingSettingsCard()
         LabelRulesSettingsCard()
 
         SurfaceCard {

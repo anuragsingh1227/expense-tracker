@@ -209,6 +209,8 @@ fun PeriodFilterRow(
         SpendPeriod.MONTH to stringResource(R.string.period_month),
         SpendPeriod.LAST_MONTH to stringResource(R.string.period_last_month),
         SpendPeriod.LAST_3_MONTHS to stringResource(R.string.period_last_3_months),
+        SpendPeriod.FINANCIAL_YEAR to stringResource(R.string.period_financial_year),
+        SpendPeriod.BILLING_CYCLE to stringResource(R.string.period_billing_cycle),
     )
     Row(
         modifier = modifier

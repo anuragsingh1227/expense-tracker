@@ -26,4 +26,7 @@ data class Transaction(
     val notes: String?,
     val dedupeHash: String,
     val manuallyEdited: Boolean = false,
+    val tags: List<String> = emptyList(),
+    val isSplit: Boolean = false,
+    val splitShares: List<SplitShare> = emptyList(),
 )

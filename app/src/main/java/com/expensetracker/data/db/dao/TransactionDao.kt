@@ -7,6 +7,7 @@ import androidx.room.Query
 import androidx.room.Update
 import com.expensetracker.data.db.entity.TransactionEntity
 import kotlinx.coroutines.flow.Flow
+import java.math.BigDecimal
 import java.time.Instant
 
 @Dao
@@ -26,6 +27,34 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transactions WHERE dedupeHash = :hash LIMIT 1")
     suspend fun findByHash(hash: String): TransactionEntity?
+
+    /**
+     * Fuzzy match used to collapse an app-notification row and a bank SMS for
+     * the same payment: identical amount + last-4 + merchant inside a window.
+     */
+    @Query(
+        """
+        SELECT * FROM transactions
+        WHERE amount = :amount
+          AND timestamp >= :fromInclusive AND timestamp <= :toInclusive
+          AND (
+            (accountLast4 IS NOT NULL AND accountLast4 = :last4)
+            OR (cardLast4 IS NOT NULL AND cardLast4 = :last4)
+          )
+          AND (
+            (:merchant IS NULL AND merchant IS NULL)
+            OR (merchant IS NOT NULL AND LOWER(merchant) = LOWER(:merchant))
+          )
+        LIMIT 1
+        """,
+    )
+    suspend fun findNearDuplicate(
+        amount: BigDecimal,
+        last4: String,
+        merchant: String?,
+        fromInclusive: Instant,
+        toInclusive: Instant,
+    ): TransactionEntity?
 
     @Query("SELECT * FROM transactions ORDER BY timestamp DESC LIMIT :limit")
     fun observeRecent(limit: Int): Flow<List<TransactionEntity>>
@@ -51,6 +80,7 @@ interface TransactionDao {
                merchant LIKE '%' || :query || '%' OR
                category LIKE '%' || :query || '%' OR
                notes LIKE '%' || :query || '%' OR
+               tagsJson LIKE '%' || :query || '%' OR
                rawSms LIKE '%' || :query || '%')
         ORDER BY timestamp DESC
         """,
@@ -150,6 +180,7 @@ interface TransactionDao {
                merchant LIKE '%' || :query || '%' OR
                category LIKE '%' || :query || '%' OR
                notes LIKE '%' || :query || '%' OR
+               tagsJson LIKE '%' || :query || '%' OR
                rawSms LIKE '%' || :query || '%')
         ORDER BY timestamp DESC
         """,
