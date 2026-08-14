@@ -99,7 +99,8 @@ class UserSmsDumpLedgerTest {
 
         // Pre-fix dashboard: spend 505602.10 / invest 66399.53 / income 319.46
         // Post-fix: self-transfers + Scripbox/Motilal leave spend; receipts ignored.
-        assertThat(spend.amount).isEqualTo(BigDecimal("73048.66"))
+        // HDFC ACH card-bill mandate (27136) is Transfer, not spend.
+        assertThat(spend.amount).isEqualTo(BigDecimal("45912.66"))
         assertThat(income.amount).isEqualTo(BigDecimal.ZERO.setScale(2))
 
         // Bank-side investments: Scripbox 121600 + Motilal 40000 + Groww 17000 + ET Money 40000

@@ -106,6 +106,13 @@ object TransactionGate {
             """(?=.*\bfolio\b)(?=.*\b(?:nav|units)\b)(?=.*\b(?:purchase|sip|processed)\b)""",
             RegexOption.IGNORE_CASE,
         ),
+        // BillDesk / INSTAPAY / biller "payment received" receipts — bank debit is the ledger row.
+        Regex("""\binstapay\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bbilldesk\b.{0,40}\b(?:payment|received)\b""", RegexOption.IGNORE_CASE),
+        Regex(
+            """(?=.*\bpayment\s+of\b)(?=.*\bis\s+received\b)(?=.*\b(?:customer\s+id|billdesk|instapay)\b)""",
+            RegexOption.IGNORE_CASE,
+        ),
     )
 
     /**

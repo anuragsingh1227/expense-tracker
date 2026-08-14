@@ -21,6 +21,7 @@ object Categories {
     const val TRANSFER = "Transfer"
     const val CASH_WITHDRAWAL = "Cash Withdrawal"
     const val EDUCATION = "Education"
+    const val TAXES = "Taxes"
     const val OTHERS = "Others"
 
     /**
@@ -32,6 +33,6 @@ object Categories {
     val defaults: List<String> = listOf(
         FOOD, GROCERIES, FUEL, SHOPPING, MEDICAL, TRAVEL, TRANSPORT, ENTERTAINMENT,
         INVESTMENT, SALARY, ATM, UTILITIES, EMI, INSURANCE, RECHARGE, SUBSCRIPTION,
-        RENT, TRANSFER, CASH_WITHDRAWAL, EDUCATION, REFUND, OTHERS,
+        RENT, TRANSFER, CASH_WITHDRAWAL, EDUCATION, TAXES, REFUND, OTHERS,
     )
 }
