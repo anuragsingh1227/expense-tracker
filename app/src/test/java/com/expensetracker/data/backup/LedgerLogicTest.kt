@@ -2,11 +2,13 @@ package com.expensetracker.data.backup
 
 import com.expensetracker.data.OwnerNameProvider
 import com.expensetracker.data.db.dao.BudgetDao
+import com.expensetracker.data.db.dao.CardStatementDao
 import com.expensetracker.data.db.dao.LabelRuleDao
 import com.expensetracker.data.db.dao.MerchantDao
 import com.expensetracker.data.db.dao.SettingsDao
 import com.expensetracker.data.db.dao.TransactionDao
 import com.expensetracker.data.db.entity.BudgetEntity
+import com.expensetracker.data.db.entity.CardStatementEntity
 import com.expensetracker.data.db.entity.LabelRuleEntity
 import com.expensetracker.data.db.entity.MerchantEntity
 import com.expensetracker.data.db.entity.SettingsEntity
@@ -101,7 +103,7 @@ class LedgerLogicTest {
             BudgetEntity(category = Categories.FOOD, monthlyLimit = BigDecimal("5000.00"), startsAt = now),
         )
         val json = BackupRepository(
-            txDao, catalog, labels, budgetDao, settingsDao, OwnerNameProvider(settingsDao), clock,
+            txDao, catalog, labels, budgetDao, FakeCardStatementDao(), settingsDao, OwnerNameProvider(settingsDao), clock,
         ).exportJson()
 
         assertThat(json).contains("\"version\"")
@@ -146,6 +148,7 @@ class LedgerLogicTest {
             MerchantCatalog(FakeMerchantDao()),
             LabelRuleCatalog(FakeLabelRuleDao()),
             FakeBudgetDao(),
+            FakeCardStatementDao(),
             settingsDao,
             OwnerNameProvider(settingsDao),
             clock,
@@ -165,6 +168,7 @@ class LedgerLogicTest {
             MerchantCatalog(FakeMerchantDao()),
             LabelRuleCatalog(FakeLabelRuleDao()),
             FakeBudgetDao(),
+            FakeCardStatementDao(),
             settingsDao,
             OwnerNameProvider(settingsDao),
             clock,
@@ -187,6 +191,7 @@ class LedgerLogicTest {
             MerchantCatalog(FakeMerchantDao()),
             LabelRuleCatalog(FakeLabelRuleDao()),
             FakeBudgetDao(),
+            FakeCardStatementDao(),
             settingsDao,
             OwnerNameProvider(settingsDao),
             clock,
@@ -216,6 +221,59 @@ class LedgerLogicTest {
             BackupSchema.validate("""{"version": 3, "transactions": "oops"}""")
         }.exceptionOrNull()
         assertThat(thrown).isInstanceOf(BackupSchemaException::class.java)
+    }
+
+    @Test
+    fun `card statements survive JSON backup restore and do not wipe transactions`() = runTest {
+        val txDao = RecordingTransactionDao()
+        txDao.insert(sampleEntity("keep-me"))
+        val cards = FakeCardStatementDao()
+        cards.insert(
+            CardStatementEntity(
+                bank = "HDFC",
+                cardLast4 = "4321",
+                totalDue = BigDecimal("12500.00"),
+                minDue = BigDecimal("625.00"),
+                dueDateEpochDay = java.time.LocalDate.of(2026, 8, 20).toEpochDay(),
+                timestamp = now,
+                sender = "VM-HDFCBK",
+                rawSms = "statement",
+                dedupeHash = "card-hash-1",
+            ),
+        )
+        val settingsDao = FakeSettingsDao()
+        val json = BackupRepository(
+            txDao,
+            MerchantCatalog(FakeMerchantDao()),
+            LabelRuleCatalog(FakeLabelRuleDao()),
+            FakeBudgetDao(),
+            cards,
+            settingsDao,
+            OwnerNameProvider(settingsDao),
+            clock,
+        ).exportJson()
+        assertThat(json).contains("cardStatements")
+        assertThat(json).contains("card-hash-1")
+        BackupSchema.validate(json)
+
+        val destCards = FakeCardStatementDao()
+        val destTx = RecordingTransactionDao()
+        destTx.insert(sampleEntity("keep-me"))
+        val result = BackupRepository(
+            destTx,
+            MerchantCatalog(FakeMerchantDao()),
+            LabelRuleCatalog(FakeLabelRuleDao()),
+            FakeBudgetDao(),
+            destCards,
+            FakeSettingsDao(),
+            OwnerNameProvider(FakeSettingsDao()),
+            clock,
+        ).importJson(json)
+
+        assertThat(result.cardStatementsRestored).isEqualTo(1)
+        assertThat(destCards.rows.single().dedupeHash).isEqualTo("card-hash-1")
+        assertThat(destCards.rows.single().cardLast4).isEqualTo("4321")
+        assertThat(destTx.rows.map { it.dedupeHash }).contains("keep-me")
     }
 
     private fun tx(
@@ -311,7 +369,7 @@ class LedgerLogicTest {
         override fun searchBetween(query: String?, from: Instant, to: Instant): Flow<List<TransactionEntity>> =
             flowOf(rows.filter { !it.timestamp.isBefore(from) && it.timestamp.isBefore(to) })
         override suspend fun getIdAndRawSms() = rows.map {
-            com.expensetracker.data.db.dao.IdRawSms(it.id, it.rawSms)
+            com.expensetracker.data.db.dao.IdRawSms(it.id, it.rawSms, it.manuallyEdited)
         }
         override suspend fun deleteByIds(ids: List<Long>) {
             deleteAllCalled = true
@@ -363,6 +421,27 @@ class LedgerLogicTest {
             rows.removeAll { it.id == id }
         }
         override suspend fun deleteAll() = rows.clear()
+    }
+
+    private class FakeCardStatementDao : CardStatementDao {
+        val rows = mutableListOf<CardStatementEntity>()
+        private var seq = 1L
+
+        override suspend fun insert(entity: CardStatementEntity): Long {
+            if (rows.any { it.dedupeHash == entity.dedupeHash }) return -1L
+            val id = seq++
+            rows += entity.copy(id = id)
+            return id
+        }
+
+        override fun observeAll(): Flow<List<CardStatementEntity>> = flowOf(rows.toList())
+        override suspend fun getAll(): List<CardStatementEntity> = rows.toList()
+        override suspend fun findById(id: Long): CardStatementEntity? = rows.find { it.id == id }
+        override suspend fun findByHash(hash: String): CardStatementEntity? =
+            rows.find { it.dedupeHash == hash }
+        override suspend fun deleteById(id: Long) {
+            rows.removeAll { it.id == id }
+        }
     }
 
     private class FakeSettingsDao : SettingsDao {

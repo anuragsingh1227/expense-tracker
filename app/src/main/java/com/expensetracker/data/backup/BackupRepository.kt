@@ -3,9 +3,11 @@ package com.expensetracker.data.backup
 import com.expensetracker.data.AppSettings
 import com.expensetracker.data.OwnerNameProvider
 import com.expensetracker.data.db.dao.BudgetDao
+import com.expensetracker.data.db.dao.CardStatementDao
 import com.expensetracker.data.db.dao.SettingsDao
 import com.expensetracker.data.db.dao.TransactionDao
 import com.expensetracker.data.db.entity.BudgetEntity
+import com.expensetracker.data.db.entity.CardStatementEntity
 import com.expensetracker.data.db.entity.LabelRuleEntity
 import com.expensetracker.data.db.entity.MerchantEntity
 import com.expensetracker.data.db.entity.SettingsEntity
@@ -27,6 +29,7 @@ data class BackupImportResult(
     val labelRulesRestored: Int = 0,
     val budgetsRestored: Int = 0,
     val settingsRestored: Int = 0,
+    val cardStatementsRestored: Int = 0,
 )
 
 /**
@@ -41,6 +44,7 @@ class BackupRepository @Inject constructor(
     private val merchantCatalog: MerchantCatalog,
     private val labelRuleCatalog: LabelRuleCatalog,
     private val budgetDao: BudgetDao,
+    private val cardStatementDao: CardStatementDao,
     private val settingsDao: SettingsDao,
     private val ownerNameProvider: OwnerNameProvider,
     private val clock: Clock,
@@ -115,6 +119,23 @@ class BackupRepository @Inject constructor(
         }
         root.put("budgets", budgetArray)
 
+        val cardArray = JSONArray()
+        cardStatementDao.getAll().forEach { stmt ->
+            cardArray.put(
+                JSONObject()
+                    .put("bank", stmt.bank)
+                    .put("cardLast4", stmt.cardLast4)
+                    .put("totalDue", stmt.totalDue?.toPlainString())
+                    .put("minDue", stmt.minDue?.toPlainString())
+                    .put("dueDateEpochDay", stmt.dueDateEpochDay)
+                    .put("timestamp", stmt.timestamp.toEpochMilli())
+                    .put("sender", stmt.sender)
+                    .put("rawSms", stmt.rawSms)
+                    .put("dedupeHash", stmt.dedupeHash),
+            )
+        }
+        root.put("cardStatements", cardArray)
+
         val settingsObj = JSONObject()
         SETTINGS_KEYS.forEach { key ->
             settingsDao.get(key)?.let { settingsObj.put(key, it) }
@@ -128,7 +149,7 @@ class BackupRepository @Inject constructor(
     suspend fun exportCsv(): String {
         val header = listOf(
             "timestamp", "type", "amount", "merchant", "category", "bank",
-            "paymentMode", "notes", "reference", "sender",
+            "paymentMode", "notes", "tags", "reference", "sender",
         ).joinToString(",")
         val rows = transactionDao.getAllOnce().map { tx ->
             listOf(
@@ -140,6 +161,7 @@ class BackupRepository @Inject constructor(
                 csvEscape(tx.bank),
                 tx.paymentMode,
                 csvEscape(tx.notes),
+                csvEscape(tx.tagsJson),
                 csvEscape(tx.referenceNumber),
                 csvEscape(tx.sender),
             ).joinToString(",")
@@ -229,6 +251,28 @@ class BackupRepository @Inject constructor(
             }
         }
 
+        var cardStatementsRestored = 0
+        val cardArray = root.optJSONArray("cardStatements") ?: JSONArray()
+        for (i in 0 until cardArray.length()) {
+            val o = cardArray.getJSONObject(i)
+            val hash = o.optString("dedupeHash")
+            if (hash.isBlank()) continue
+            val id = cardStatementDao.insert(
+                CardStatementEntity(
+                    bank = o.optStringOrNull("bank"),
+                    cardLast4 = o.optStringOrNull("cardLast4"),
+                    totalDue = o.optStringOrNull("totalDue")?.let(::BigDecimal),
+                    minDue = o.optStringOrNull("minDue")?.let(::BigDecimal),
+                    dueDateEpochDay = o.getLong("dueDateEpochDay"),
+                    timestamp = Instant.ofEpochMilli(o.getLong("timestamp")),
+                    sender = o.optStringOrNull("sender"),
+                    rawSms = o.optStringOrNull("rawSms"),
+                    dedupeHash = hash,
+                ),
+            )
+            if (id != -1L) cardStatementsRestored++
+        }
+
         var settingsRestored = 0
         val settingsObj = root.optJSONObject("settings")
         if (settingsObj != null) {
@@ -252,6 +296,7 @@ class BackupRepository @Inject constructor(
             labelRulesRestored = labelRules.size,
             budgetsRestored = budgetsRestored,
             settingsRestored = settingsRestored,
+            cardStatementsRestored = cardStatementsRestored,
         )
     }
 

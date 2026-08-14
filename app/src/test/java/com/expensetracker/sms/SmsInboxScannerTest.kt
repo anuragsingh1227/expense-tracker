@@ -110,8 +110,48 @@ class SmsInboxScannerTest {
         assertThat(settings.get(AppSettings.LAST_SMS_SCAN_MILLIS)).isNull()
     }
 
+    @Test
+    fun `credit card due SMS is ingested as a statement not a ledger row`() = runTest {
+        val due = RawSms("VM-HDFCBK", SampleSms.DUE_REMINDER_SPAM, now)
+        val debit = RawSms("VM-HDFCBK", SampleSms.HDFC_DEBIT, now.minusSeconds(60))
+        val statements = RecordingStatements()
+        val repo = FakeTransactionRepository()
+        val result = SmsInboxScanner(
+            RecordingSource(listOf(due, debit)),
+            SmsParser(),
+            repo,
+            FakeSettingsDao(),
+            clock,
+            statements,
+        ).scan()
+
+        assertThat(statements.ingested.map { it.body }).contains(SampleSms.DUE_REMINDER_SPAM)
+        assertThat(repo.stored).hasSize(1)
+        assertThat(result.inserted).isEqualTo(1)
+    }
+
     private object NoopStatements : CardStatementIngestor {
         override suspend fun ingest(sms: RawSms) = null
+    }
+
+    private class RecordingStatements : CardStatementIngestor {
+        val ingested = mutableListOf<RawSms>()
+        override suspend fun ingest(sms: RawSms): com.expensetracker.domain.model.CardStatement? {
+            if (com.expensetracker.sms.parser.CreditCardStatementParser.parse(sms) == null) return null
+            ingested += sms
+            return com.expensetracker.domain.model.CardStatement(
+                id = ingested.size.toLong(),
+                bank = "HDFC",
+                cardLast4 = null,
+                totalDue = null,
+                minDue = Money.ofRupees("1.00"),
+                dueDate = java.time.LocalDate.of(2024, 8, 12),
+                timestamp = sms.timestamp,
+                sender = sms.sender,
+                rawSms = sms.body,
+                dedupeHash = "stmt-${ingested.size}",
+            )
+        }
     }
 
     private object UnavailableSource : SmsMessageSource {

@@ -116,7 +116,7 @@
     <string name="backup_export_failed">Couldn\'t create backup. Try again.</string>
     <string name="backup_import_failed">Couldn\'t restore backup. Check the file and try again.</string>
     <string name="cleanup_confirm_title">Remove spam-like entries?</string>
-    <string name="cleanup_confirm_body">This deletes any saved SMS that no longer look like real transactions. This can\'t be undone.</string>
+    <string name="cleanup_confirm_body">This deletes imported SMS that no longer look like real transactions. Cash / manual entries you added are kept. This can\'t be undone.</string>
     <string name="empty_transactions">No transactions yet. Grant SMS permission to auto-import.</string>
     <string name="rescan_rationale">Import banking and UPI SMS from your inbox (last 90 days on first run, or a full rescan on demand).</string>
     <string name="rescan_inbox">Rescan SMS inbox</string>
@@ -169,7 +169,7 @@
     <string name="backup_exported">Backup saved. Choose Google Drive in the picker next time to keep it in the cloud.</string>
     <string name="backup_imported">Restored %1$d new · skipped %2$d duplicates · %3$d merchant rules · %4$d label rules</string>
     <string name="settings_cleanup_title">Clean spam</string>
-    <string name="settings_cleanup_body">Removes imported rows that look like offers, OTPs, due reminders, or other non-transactions (using the updated filters).</string>
+    <string name="settings_cleanup_body">Removes imported SMS that look like offers, OTPs, due reminders, or other non-transactions. Manual cash entries are never deleted.</string>
     <string name="cleanup_spam">Remove spam entries</string>
     <string name="cleanup_result">Removed %1$d spam-like entries</string>
     <string name="add_transaction_title">Add transaction</string>
@@ -213,6 +213,7 @@
     <string name="add_transaction_fab_a11y">Add expense</string>
     <string name="lock_lockout_wait">Too many attempts. Try again in %1$d s.</string>
     <string name="widget_month_spend">Spent this month</string>
+    <string name="widget_amount_placeholder">—</string>
     <string name="widget_description">Shows this month\'s spend total.</string>
     <string name="period_financial_year">FY</string>
     <string name="period_billing_cycle">Card</string>

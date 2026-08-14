@@ -54,9 +54,9 @@ fun DashboardScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
-    LaunchedEffect(state.spend, state.period) {
+    LaunchedEffect(state.spend, state.period, amountsHidden) {
         if (state.period == SpendPeriod.MONTH) {
-            MonthSpendWidgetProvider.cacheAmount(context, state.spend.amount)
+            MonthSpendWidgetProvider.cacheAmount(context, state.spend.amount, amountsHidden)
         }
     }
     val spendLabel = when (state.period) {

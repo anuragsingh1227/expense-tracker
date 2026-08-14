@@ -23,5 +23,5 @@
         android:textSize="22sp"
         android:textStyle="bold"
         android:textColor="#111111"
-        android:text="@string/amount_hidden_mask" />
+        android:text="@string/widget_amount_placeholder" />
 </LinearLayout>

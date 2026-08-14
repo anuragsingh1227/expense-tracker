@@ -9,7 +9,9 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.expensetracker.data.CatalogSeeder
 import com.expensetracker.data.OwnerNameProvider
+import com.expensetracker.data.repository.CardStatementRepository
 import com.expensetracker.domain.security.AppForegroundTracker
+import com.expensetracker.sms.CardDueReminderScheduler
 import com.expensetracker.sms.parser.LabelRuleCatalog
 import com.expensetracker.sms.parser.MerchantCatalog
 import dagger.hilt.android.HiltAndroidApp
@@ -26,6 +28,8 @@ class ExpenseApp : Application() {
     @Inject lateinit var labelRuleCatalog: LabelRuleCatalog
     @Inject lateinit var ownerNameProvider: OwnerNameProvider
     @Inject lateinit var catalogSeeder: CatalogSeeder
+    @Inject lateinit var cardStatements: CardStatementRepository
+    @Inject lateinit var cardDueReminderScheduler: CardDueReminderScheduler
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -38,6 +42,7 @@ class ExpenseApp : Application() {
             merchantCatalog.refresh()
             labelRuleCatalog.refresh()
             ownerNameProvider.refresh()
+            cardDueReminderScheduler.scheduleAll(cardStatements.getAll())
         }
     }
 

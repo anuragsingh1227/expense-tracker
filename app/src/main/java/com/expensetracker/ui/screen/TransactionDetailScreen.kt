@@ -94,6 +94,9 @@ class TransactionDetailViewModel @Inject constructor(
     private val _saveEvent = MutableStateFlow(0)
     val saveEvent: StateFlow<Int> = _saveEvent.asStateFlow()
 
+    @Volatile
+    private var saving = false
+
     fun load(id: Long) {
         viewModelScope.launch { _state.value = repository.find(id) }
     }
@@ -103,17 +106,23 @@ class TransactionDetailViewModel @Inject constructor(
     }
 
     fun save(updated: Transaction, rememberForMerchant: Boolean) {
+        if (saving) return
+        saving = true
         viewModelScope.launch {
-            repository.update(updated.copy(manuallyEdited = true))
-            if (rememberForMerchant) {
-                val key = updated.merchant?.takeIf { it.isNotBlank() }
-                    ?: updated.narration?.takeIf { it.isNotBlank() }
-                if (key != null) {
-                    merchantCatalog.remember(key, updated.category)
+            try {
+                repository.update(updated.copy(manuallyEdited = true))
+                if (rememberForMerchant) {
+                    val key = updated.merchant?.takeIf { it.isNotBlank() }
+                        ?: updated.narration?.takeIf { it.isNotBlank() }
+                    if (key != null) {
+                        merchantCatalog.remember(key, updated.category)
+                    }
                 }
+                _state.value = repository.find(updated.id)
+                _saveEvent.value += 1
+            } finally {
+                saving = false
             }
-            _state.value = repository.find(updated.id)
-            _saveEvent.value += 1
         }
     }
 
@@ -397,7 +406,7 @@ fun TransactionDetailScreen(
                 MetaRow(stringResource(R.string.label_reference), current.referenceNumber ?: "—")
                 current.balance?.let {
                     Spacer(Modifier.height(12.dp))
-                    MetaRow(stringResource(R.string.label_balance_after), it.formatInr())
+                    MetaRow(stringResource(R.string.label_balance_after), it.maskableFormatInr())
                 }
             }
 

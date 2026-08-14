@@ -61,6 +61,9 @@ class AddTransactionViewModel @Inject constructor(
     private val clock: Clock,
 ) : ViewModel() {
 
+    @Volatile
+    private var saving = false
+
     fun save(
         amountText: String,
         type: TransactionType,
@@ -72,31 +75,37 @@ class AddTransactionViewModel @Inject constructor(
     ) {
         val amount = runCatching { Money.ofRupees(amountText.trim()) }.getOrNull() ?: return
         if (amount.amount.signum() <= 0) return
+        if (saving) return
+        saving = true
         val cat = category.trim().ifEmpty { Categories.OTHERS }
         viewModelScope.launch {
-            val zone = clock.zone
-            val tx = Transaction(
-                amount = amount,
-                type = type,
-                merchant = merchant.trim().takeIf { it.isNotEmpty() },
-                category = cat,
-                bank = null,
-                accountLast4 = null,
-                cardLast4 = null,
-                upiId = null,
-                referenceNumber = null,
-                balance = null,
-                paymentMode = PaymentMode.CASH,
-                timestamp = date.atStartOfDay(zone).toInstant(),
-                sender = null,
-                rawSms = null,
-                narration = null,
-                notes = notes.trim().takeIf { it.isNotEmpty() },
-                dedupeHash = "manual-" + UUID.randomUUID(),
-                manuallyEdited = true,
-            )
-            repository.insertManual(tx)
-            onDone()
+            try {
+                val zone = clock.zone
+                val tx = Transaction(
+                    amount = amount,
+                    type = type,
+                    merchant = merchant.trim().takeIf { it.isNotEmpty() },
+                    category = cat,
+                    bank = null,
+                    accountLast4 = null,
+                    cardLast4 = null,
+                    upiId = null,
+                    referenceNumber = null,
+                    balance = null,
+                    paymentMode = PaymentMode.CASH,
+                    timestamp = date.atStartOfDay(zone).toInstant(),
+                    sender = null,
+                    rawSms = null,
+                    narration = null,
+                    notes = notes.trim().takeIf { it.isNotEmpty() },
+                    dedupeHash = "manual-" + UUID.randomUUID(),
+                    manuallyEdited = true,
+                )
+                repository.insertManual(tx)
+                onDone()
+            } finally {
+                saving = false
+            }
         }
     }
 }

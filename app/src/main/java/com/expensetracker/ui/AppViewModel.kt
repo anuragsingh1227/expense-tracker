@@ -148,6 +148,7 @@ class AppViewModel @Inject constructor(
         val lockoutUntil = settingsDao.get(AppSettings.APP_LOCK_LOCKOUT_UNTIL)?.toLongOrNull() ?: 0L
         val now = Instant.now(clock).toEpochMilli()
         val activeLockout = if (lockoutUntil > now) lockoutUntil else 0L
+        pinFailureCount = settingsDao.get(AppSettings.APP_LOCK_PIN_FAILURES)?.toIntOrNull()?.coerceAtLeast(0) ?: 0
         _appLockState.value = AppLockUiState(
             loading = false,
             enabled = enabled,
@@ -178,6 +179,8 @@ class AppViewModel @Inject constructor(
                     SettingsEntity(AppSettings.APP_LOCK_PIN_SALT, salt),
                     SettingsEntity(AppSettings.APP_LOCK_PIN_HASH, hash),
                     SettingsEntity(AppSettings.APP_LOCK_ENABLED, "true"),
+                    SettingsEntity(AppSettings.APP_LOCK_PIN_FAILURES, "0"),
+                    SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, "0"),
                 ),
             )
             pinFailureCount = 0
@@ -221,6 +224,8 @@ class AppViewModel @Inject constructor(
                 listOf(
                     SettingsEntity(AppSettings.APP_LOCK_ENABLED, "false"),
                     SettingsEntity(AppSettings.APP_LOCK_BIOMETRIC_ENABLED, "false"),
+                    SettingsEntity(AppSettings.APP_LOCK_PIN_FAILURES, "0"),
+                    SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, "0"),
                 ),
             )
             pinFailureCount = 0
@@ -262,9 +267,12 @@ class AppViewModel @Inject constructor(
             val backgroundedDuringVerify = AppForegroundTracker.backgroundedAtMillis.value != verifyStartedAt
             if (ok) {
                 pinFailureCount = 0
-                if (_appLockState.value.lockoutUntilMillis != 0L) {
-                    settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, "0"))
-                }
+                settingsDao.putAll(
+                    listOf(
+                        SettingsEntity(AppSettings.APP_LOCK_PIN_FAILURES, "0"),
+                        SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, "0"),
+                    ),
+                )
                 _appLockState.value = _appLockState.value.copy(
                     locked = backgroundedDuringVerify,
                     pinError = false,
@@ -275,13 +283,19 @@ class AppViewModel @Inject constructor(
                 if (pinFailureCount >= MAX_PIN_FAILURES) {
                     val until = Instant.now(clock).toEpochMilli() + LOCKOUT_DURATION_MS
                     pinFailureCount = 0
-                    settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, until.toString()))
+                    settingsDao.putAll(
+                        listOf(
+                            SettingsEntity(AppSettings.APP_LOCK_PIN_FAILURES, "0"),
+                            SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, until.toString()),
+                        ),
+                    )
                     _appLockState.value = _appLockState.value.copy(
                         locked = true,
                         pinError = true,
                         lockoutUntilMillis = until,
                     )
                 } else {
+                    settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_PIN_FAILURES, pinFailureCount.toString()))
                     _appLockState.value = _appLockState.value.copy(
                         locked = true,
                         pinError = true,
@@ -302,7 +316,12 @@ class AppViewModel @Inject constructor(
             lockoutUntilMillis = 0L,
         )
         viewModelScope.launch {
-            settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, "0"))
+            settingsDao.putAll(
+                listOf(
+                    SettingsEntity(AppSettings.APP_LOCK_PIN_FAILURES, "0"),
+                    SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, "0"),
+                ),
+            )
         }
     }
 

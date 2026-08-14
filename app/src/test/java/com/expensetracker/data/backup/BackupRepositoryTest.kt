@@ -3,11 +3,13 @@ package com.expensetracker.data.backup
 import com.expensetracker.data.AppSettings
 import com.expensetracker.data.OwnerNameProvider
 import com.expensetracker.data.db.dao.BudgetDao
+import com.expensetracker.data.db.dao.CardStatementDao
 import com.expensetracker.data.db.dao.LabelRuleDao
 import com.expensetracker.data.db.dao.MerchantDao
 import com.expensetracker.data.db.dao.SettingsDao
 import com.expensetracker.data.db.dao.TransactionDao
 import com.expensetracker.data.db.entity.BudgetEntity
+import com.expensetracker.data.db.entity.CardStatementEntity
 import com.expensetracker.data.db.entity.LabelRuleEntity
 import com.expensetracker.data.db.entity.MerchantEntity
 import com.expensetracker.data.db.entity.SettingsEntity
@@ -81,7 +83,7 @@ class BackupRepositoryTest {
             ),
         )
 
-        val repo = BackupRepository(txDao, catalog, labels, budgetDao, settingsDao, ownerNames, clock)
+        val repo = BackupRepository(txDao, catalog, labels, budgetDao, FakeCardStatementDao(), settingsDao, ownerNames, clock)
         val json = repo.exportJson()
         assertThat(json).contains("Priya")
         assertThat(json).contains("Food")
@@ -118,7 +120,7 @@ class BackupRepositoryTest {
         val labels2 = LabelRuleCatalog(FakeLabelRuleDao())
         val budgetDao2 = FakeBudgetDao()
         val result = BackupRepository(
-            txDao2, catalog2, labels2, budgetDao2, settingsDao2, ownerNames2, clock,
+            txDao2, catalog2, labels2, budgetDao2, FakeCardStatementDao(), settingsDao2, ownerNames2, clock,
         ).importJson(json)
 
         assertThat(result.transactionsInserted).isEqualTo(0)
@@ -179,7 +181,7 @@ class BackupRepositoryTest {
         override fun searchBetween(query: String?, from: Instant, to: Instant): Flow<List<TransactionEntity>> =
             flowOf(rows.filter { !it.timestamp.isBefore(from) && it.timestamp.isBefore(to) })
         override suspend fun getIdAndRawSms() = rows.map {
-            com.expensetracker.data.db.dao.IdRawSms(it.id, it.rawSms)
+            com.expensetracker.data.db.dao.IdRawSms(it.id, it.rawSms, it.manuallyEdited)
         }
         override suspend fun deleteByIds(ids: List<Long>) {
             rows.removeAll { it.id in ids }
@@ -243,6 +245,27 @@ class BackupRepositoryTest {
 
         override suspend fun deleteAll() {
             rows.clear()
+        }
+    }
+
+    private class FakeCardStatementDao : CardStatementDao {
+        val rows = mutableListOf<CardStatementEntity>()
+        private var seq = 1L
+
+        override suspend fun insert(entity: CardStatementEntity): Long {
+            if (rows.any { it.dedupeHash == entity.dedupeHash }) return -1L
+            val id = seq++
+            rows += entity.copy(id = id)
+            return id
+        }
+
+        override fun observeAll(): Flow<List<CardStatementEntity>> = flowOf(rows.toList())
+        override suspend fun getAll(): List<CardStatementEntity> = rows.toList()
+        override suspend fun findById(id: Long): CardStatementEntity? = rows.find { it.id == id }
+        override suspend fun findByHash(hash: String): CardStatementEntity? =
+            rows.find { it.dedupeHash == hash }
+        override suspend fun deleteById(id: Long) {
+            rows.removeAll { it.id == id }
         }
     }
 

@@ -16,6 +16,7 @@ object BackupSchema {
     private val REQUIRED_LABEL_FIELDS = listOf("label")
     private val REQUIRED_BUDGET_FIELDS = listOf("category", "monthlyLimit", "startsAt")
     private val REQUIRED_MERCHANT_FIELDS = listOf("key", "displayName", "category")
+    private val REQUIRED_CARD_FIELDS = listOf("dueDateEpochDay", "timestamp", "dedupeHash")
 
     fun validate(json: String): JSONObject {
         if (json.isBlank()) {
@@ -82,6 +83,17 @@ object BackupSchema {
                 if (!obj.has(field) || obj.optString(field).isBlank()) {
                     throw BackupSchemaException("merchants[$index] missing required field '$field'")
                 }
+            }
+        }
+
+        validateArray(root, "cardStatements") { obj, index ->
+            REQUIRED_CARD_FIELDS.forEach { field ->
+                if (!obj.has(field) || obj.isNull(field)) {
+                    throw BackupSchemaException("cardStatements[$index] missing required field '$field'")
+                }
+            }
+            if (obj.optString("dedupeHash").isBlank()) {
+                throw BackupSchemaException("cardStatements[$index] missing dedupeHash")
             }
         }
 
