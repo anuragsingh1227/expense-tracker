@@ -10,25 +10,23 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -54,13 +52,20 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.expensetracker.R
+import com.expensetracker.data.AppSettings
+import com.expensetracker.data.db.dao.SettingsDao
 import com.expensetracker.data.repository.TransactionRepository
+import com.expensetracker.domain.insights.PeerBalance
+import com.expensetracker.domain.insights.SplitLedger
+import com.expensetracker.domain.model.Money
 import com.expensetracker.domain.model.Transaction
-import com.expensetracker.sms.parser.Categories
+import com.expensetracker.ui.components.AmountVisibilityToggle
 import com.expensetracker.ui.components.EmptyState
 import com.expensetracker.ui.components.PeriodFilterRow
 import com.expensetracker.ui.components.ScreenHeader
+import com.expensetracker.ui.components.SurfaceCard
 import com.expensetracker.ui.components.TransactionListItem
+import com.expensetracker.ui.components.maskableFormatInr
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -81,12 +86,16 @@ data class ActivityUiState(
     val categoryFilter: String? = null,
     val bankFilter: String? = null,
     val availableBanks: List<String> = emptyList(),
+    val availableCategories: List<String> = emptyList(),
+    val peerBalances: List<PeerBalance> = emptyList(),
+    val billingCycleStartDay: Int = 1,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class TransactionsViewModel @Inject constructor(
     private val repository: TransactionRepository,
+    private val settingsDao: SettingsDao,
     private val clock: Clock,
 ) : ViewModel() {
 
@@ -94,41 +103,57 @@ class TransactionsViewModel @Inject constructor(
     private val periodFlow = MutableStateFlow(SpendPeriod.MONTH)
     private val categoryFilterFlow = MutableStateFlow<String?>(null)
     private val bankFilterFlow = MutableStateFlow<String?>(null)
+    private val billingDayFlow = settingsDao.observe(AppSettings.CC_BILLING_CYCLE_START_DAY)
+        .map { it?.toIntOrNull()?.coerceIn(1, 28) ?: 1 }
 
     val state: StateFlow<ActivityUiState> = combine(
         queryFlow,
         periodFlow,
         categoryFilterFlow,
         bankFilterFlow,
-        dateBoundaryFlow(clock),
-    ) { query, period, category, bank, _ ->
-        ActivityFilters(query, period, category, bank)
+        billingDayFlow,
+    ) { query, period, category, bank, billingDay ->
+        ActivityFilters(query, period, category, bank, billingDay)
     }
+        .combine(dateBoundaryFlow(clock)) { filters, _ -> filters }
         .flatMapLatest { filters ->
-            val window = DashboardRanges.forPeriod(filters.period, clock)
-            repository.searchBetween(filters.query, window.fromInclusive, window.toExclusive)
-                .map { list ->
-                    val banks = list.mapNotNull { it.bank?.takeIf(String::isNotBlank) }
-                        .distinct()
-                        .sorted()
-                    val filtered = list.filter { tx ->
-                        (filters.category == null || tx.category == filters.category) &&
-                            (filters.bank == null || tx.bank == filters.bank)
-                    }
-                    ActivityUiState(
-                        period = filters.period,
-                        rangeLabel = window.labelRange,
-                        transactions = filtered,
-                        categoryFilter = filters.category,
-                        bankFilter = filters.bank,
-                        availableBanks = banks,
-                    )
+            val window = DashboardRanges.forPeriod(
+                filters.period,
+                clock,
+                billingCycleStartDay = filters.billingDay,
+            )
+            combine(
+                repository.searchBetween(filters.query, window.fromInclusive, window.toExclusive),
+                repository.observeAll().map { SplitLedger.balances(it) },
+            ) { list, debts ->
+                val banks = list.mapNotNull { it.bank?.takeIf(String::isNotBlank) }
+                    .distinct()
+                    .sorted()
+                val categories = list.map { it.category }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .sorted()
+                val filtered = list.filter { tx ->
+                    (filters.category == null || tx.category == filters.category) &&
+                        (filters.bank == null || tx.bank == filters.bank)
                 }
+                ActivityUiState(
+                    period = filters.period,
+                    rangeLabel = window.labelRange,
+                    transactions = filtered,
+                    categoryFilter = filters.category,
+                    bankFilter = filters.bank,
+                    availableBanks = banks,
+                    availableCategories = categories,
+                    peerBalances = debts,
+                    billingCycleStartDay = filters.billingDay,
+                )
+            }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ActivityUiState())
 
     fun setQuery(q: String) {
-        queryFlow.value = q.takeIf { it.isNotBlank() }
+        queryFlow.value = q.trim().removePrefix("#").takeIf { it.isNotBlank() }
     }
 
     fun setPeriod(period: SpendPeriod) {
@@ -155,24 +180,17 @@ class TransactionsViewModel @Inject constructor(
         val period: SpendPeriod,
         val category: String?,
         val bank: String?,
+        val billingDay: Int,
     )
 }
-
-private val FILTER_CATEGORIES = listOf(
-    Categories.FOOD,
-    Categories.GROCERIES,
-    Categories.SHOPPING,
-    Categories.TRAVEL,
-    Categories.TRANSPORT,
-    Categories.UTILITIES,
-    Categories.TRANSFER,
-    Categories.OTHERS,
-)
 
 @Composable
 fun TransactionsScreen(
     onOpenTransaction: (Long) -> Unit,
     onAddTransaction: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    amountsHidden: Boolean = false,
+    onToggleAmountsHidden: () -> Unit = {},
     viewModel: TransactionsViewModel = hiltViewModel(),
 ) {
     var query by remember { mutableStateOf("") }
@@ -192,6 +210,19 @@ fun TransactionsScreen(
         val visibleIds = state.transactions.mapTo(mutableSetOf()) { it.id }
         val pruned = selectedIds.intersect(visibleIds)
         if (pruned != selectedIds) selectedIds = pruned
+    }
+    LaunchedEffect(state.availableCategories, state.categoryFilter) {
+        val selected = state.categoryFilter ?: return@LaunchedEffect
+        if (selected !in state.availableCategories) viewModel.setCategoryFilter(null)
+    }
+    LaunchedEffect(state.availableBanks, state.bankFilter) {
+        val selected = state.bankFilter ?: return@LaunchedEffect
+        if (selected !in state.availableBanks) viewModel.setBankFilter(null)
+    }
+    LaunchedEffect(state.period, state.billingCycleStartDay) {
+        if (state.period == SpendPeriod.BILLING_CYCLE && state.billingCycleStartDay == 1) {
+            viewModel.setPeriod(SpendPeriod.MONTH)
+        }
     }
 
     fun toggleSelected(id: Long) {
@@ -276,58 +307,65 @@ fun TransactionsScreen(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
                         stringResource(R.string.selection_count, selectedIds.size),
                         style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { selectedIds = emptySet() }) {
-                            Text(stringResource(R.string.action_cancel))
-                        }
-                        OutlinedButton(
-                            onClick = { confirmDelete = true },
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error,
-                            ),
-                        ) {
-                            Icon(
-                                Icons.Outlined.Delete,
-                                contentDescription = null,
-                                modifier = Modifier.height(18.dp),
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(stringResource(R.string.action_delete))
-                        }
-                        Button(onClick = ::copySelected) {
-                            Icon(
-                                Icons.Outlined.ContentCopy,
-                                contentDescription = null,
-                                modifier = Modifier.height(18.dp),
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(stringResource(R.string.action_copy_sms))
-                        }
+                    IconButton(onClick = { selectedIds = emptySet() }) {
+                        Icon(
+                            Icons.Outlined.Close,
+                            contentDescription = stringResource(R.string.activity_select_cancel_a11y),
+                        )
+                    }
+                    IconButton(onClick = { confirmDelete = true }) {
+                        Icon(
+                            Icons.Outlined.Delete,
+                            contentDescription = stringResource(R.string.activity_select_delete_a11y),
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    IconButton(onClick = ::copySelected) {
+                        Icon(
+                            Icons.Outlined.ContentCopy,
+                            contentDescription = stringResource(R.string.activity_select_copy_a11y),
+                        )
                     }
                 }
             } else {
-                ScreenHeader(
-                    title = stringResource(R.string.tab_transactions),
-                    subtitle = if (state.rangeLabel.isNotBlank()) {
-                        state.rangeLabel
-                    } else {
-                        stringResource(R.string.transactions_subtitle)
-                    },
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ScreenHeader(
+                        title = stringResource(R.string.tab_transactions),
+                        subtitle = if (state.rangeLabel.isNotBlank()) {
+                            state.rangeLabel
+                        } else {
+                            stringResource(R.string.transactions_subtitle)
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    AmountVisibilityToggle(
+                        amountsHidden = amountsHidden,
+                        onToggle = onToggleAmountsHidden,
+                    )
+                }
             }
             Spacer(Modifier.height(14.dp))
             PeriodFilterRow(
                 selected = state.period,
                 onSelect = viewModel::setPeriod,
+                showBillingCycle = state.billingCycleStartDay != 1,
             )
+            if (state.peerBalances.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                DebtsCard(balances = state.peerBalances)
+            }
             Spacer(Modifier.height(10.dp))
             CategoryFilterRow(
+                categories = state.availableCategories,
                 selected = state.categoryFilter,
                 onSelect = viewModel::setCategoryFilter,
             )
@@ -347,7 +385,7 @@ fun TransactionsScreen(
                     viewModel.setQuery(it)
                 },
                 singleLine = true,
-                label = { Text(stringResource(R.string.search_hint)) },
+                placeholder = { Text(stringResource(R.string.search_placeholder)) },
                 leadingIcon = {
                     Icon(
                         Icons.Outlined.Search,
@@ -376,6 +414,10 @@ fun TransactionsScreen(
                         icon = Icons.Outlined.SearchOff,
                         title = stringResource(R.string.empty_transactions_title),
                         body = stringResource(R.string.empty_period_transactions),
+                        actionLabel = stringResource(R.string.empty_dashboard_add),
+                        onAction = onAddTransaction,
+                        secondaryActionLabel = stringResource(R.string.empty_dashboard_paste),
+                        onSecondaryAction = onOpenSettings,
                     )
                 }
                 else -> {
@@ -402,10 +444,43 @@ fun TransactionsScreen(
 }
 
 @Composable
+private fun DebtsCard(balances: List<PeerBalance>) {
+    val owedToMe = SplitLedger.totalOwedToMe(balances)
+    SurfaceCard {
+        Text(
+            stringResource(R.string.debts_title),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            stringResource(R.string.debts_subtitle, owedToMe.maskableFormatInr()),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(10.dp))
+        balances.forEach { row ->
+            val label = if (row.owedToMe.amount.signum() >= 0) {
+                stringResource(R.string.debts_owes_me, row.name, row.owedToMe.maskableFormatInr())
+            } else {
+                stringResource(
+                    R.string.debts_i_owe,
+                    row.name,
+                    Money(row.owedToMe.amount.abs()).maskableFormatInr(),
+                )
+            }
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(4.dp))
+        }
+    }
+}
+
+@Composable
 private fun CategoryFilterRow(
+    categories: List<String>,
     selected: String?,
     onSelect: (String?) -> Unit,
 ) {
+    if (categories.isEmpty()) return
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -417,7 +492,7 @@ private fun CategoryFilterRow(
             onClick = { onSelect(null) },
             label = { Text(stringResource(R.string.filter_all_categories)) },
         )
-        FILTER_CATEGORIES.forEach { cat ->
+        categories.forEach { cat ->
             FilterChip(
                 selected = selected == cat,
                 onClick = { onSelect(if (selected == cat) null else cat) },

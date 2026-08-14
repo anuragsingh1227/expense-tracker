@@ -1,5 +1,6 @@
 package com.expensetracker.ui.screen
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,10 +14,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -31,7 +28,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.expensetracker.AppFeatures
 import com.expensetracker.R
+import com.expensetracker.ui.components.AmountVisibilityToggle
 import com.expensetracker.ui.components.CategoryBreakdown
 import com.expensetracker.ui.components.EmptyState
 import com.expensetracker.ui.components.MetricTile
@@ -43,28 +42,40 @@ import com.expensetracker.ui.components.SurfaceCard
 import com.expensetracker.ui.components.TransactionListItem
 import com.expensetracker.ui.components.maskableFormatInr
 import com.expensetracker.ui.widget.MonthSpendWidgetProvider
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun DashboardScreen(
     onOpenTransaction: (Long) -> Unit,
     onOpenSettings: () -> Unit = {},
+    onOpenAdd: () -> Unit = {},
     amountsHidden: Boolean = false,
     onToggleAmountsHidden: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
-    LaunchedEffect(state.spend, state.period) {
+    LaunchedEffect(state.spend, state.period, amountsHidden) {
         if (state.period == SpendPeriod.MONTH) {
-            MonthSpendWidgetProvider.cacheAmount(context, state.spend.amount)
+            MonthSpendWidgetProvider.cacheAmount(context, state.spend.amount, amountsHidden)
         }
     }
-    val spendLabel = when (state.period) {
-        SpendPeriod.DAY -> stringResource(R.string.period_spent_day)
-        SpendPeriod.WEEK -> stringResource(R.string.period_spent_week)
-        SpendPeriod.MONTH -> stringResource(R.string.period_spent_month)
-        SpendPeriod.LAST_MONTH -> stringResource(R.string.period_spent_last_month)
-        SpendPeriod.LAST_3_MONTHS -> stringResource(R.string.period_spent_last_3_months)
+    val spendLabel = when {
+        state.spend.amount.signum() < 0 -> stringResource(R.string.period_net_refunds)
+        else -> when (state.period) {
+            SpendPeriod.DAY -> stringResource(R.string.period_spent_day)
+            SpendPeriod.WEEK -> stringResource(R.string.period_spent_week)
+            SpendPeriod.MONTH -> stringResource(R.string.period_spent_month)
+            SpendPeriod.LAST_MONTH -> stringResource(R.string.period_spent_last_month)
+            SpendPeriod.LAST_3_MONTHS -> stringResource(R.string.period_spent_last_3_months)
+            SpendPeriod.FINANCIAL_YEAR -> stringResource(R.string.period_spent_financial_year)
+            SpendPeriod.BILLING_CYCLE -> stringResource(R.string.period_spent_billing_cycle)
+        }
+    }
+    LaunchedEffect(state.period, state.billingCycleStartDay) {
+        if (state.period == SpendPeriod.BILLING_CYCLE && state.billingCycleStartDay == 1) {
+            viewModel.setPeriod(SpendPeriod.MONTH)
+        }
     }
 
     LazyColumn(
@@ -93,18 +104,10 @@ fun DashboardScreen(
                         fontWeight = FontWeight.Bold,
                     )
                 }
-                IconButton(onClick = onToggleAmountsHidden) {
-                    Icon(
-                        if (amountsHidden) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                        contentDescription = stringResource(
-                            if (amountsHidden) {
-                                R.string.dashboard_show_amounts_a11y
-                            } else {
-                                R.string.dashboard_hide_amounts_a11y
-                            },
-                        ),
-                    )
-                }
+                AmountVisibilityToggle(
+                    amountsHidden = amountsHidden,
+                    onToggle = onToggleAmountsHidden,
+                )
             }
         }
 
@@ -112,6 +115,7 @@ fun DashboardScreen(
             PeriodFilterRow(
                 selected = state.period,
                 onSelect = viewModel::setPeriod,
+                showBillingCycle = state.billingCycleStartDay != 1,
             )
         }
 
@@ -141,17 +145,6 @@ fun DashboardScreen(
                         state.spend.maskableFormatInr(),
                         style = MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        stringResource(
-                            R.string.period_spend_supporting,
-                            state.income.maskableFormatInr(),
-                            state.investments.maskableFormatInr(),
-                            state.net.maskableFormatInr(),
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f),
                     )
                 }
             }
@@ -184,7 +177,49 @@ fun DashboardScreen(
             )
         }
 
-        if (state.stack.any { it.total.amount.signum() > 0 }) {
+        if (state.upcomingDues.isNotEmpty()) {
+            item {
+                SurfaceCard(
+                    modifier = Modifier.clickable(onClick = onOpenSettings),
+                ) {
+                    Text(
+                        stringResource(R.string.dashboard_card_due_title),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    val dueFmt = DateTimeFormatter.ofPattern("d MMM")
+                    state.upcomingDues.forEach { stmt ->
+                        val card = stmt.cardLast4?.let { "••••$it" } ?: "—"
+                        val bank = stmt.bank ?: stringResource(R.string.card_due_unknown_bank)
+                        Text(
+                            stringResource(
+                                R.string.dashboard_card_due_row,
+                                bank,
+                                card,
+                                stmt.dueDate.format(dueFmt),
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        stmt.totalDue?.let { total ->
+                            Text(
+                                stringResource(R.string.dashboard_card_due_amount, total.maskableFormatInr()),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Text(
+                        stringResource(R.string.dashboard_card_due_hint),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        }
+
+        val showMonthInsights = state.period != SpendPeriod.DAY && state.period != SpendPeriod.WEEK
+        if (showMonthInsights && state.stack.any { it.total.amount.signum() > 0 }) {
             item {
                 SurfaceCard {
                     Text(
@@ -203,7 +238,7 @@ fun DashboardScreen(
             }
         }
 
-        if (state.momChanges.isNotEmpty()) {
+        if (showMonthInsights && state.momChanges.isNotEmpty()) {
             item {
                 SurfaceCard {
                     Text(
@@ -256,12 +291,19 @@ fun DashboardScreen(
 
         if (state.recent.isEmpty()) {
             item {
+                val autoSms = AppFeatures.autoSms
                 EmptyState(
                     icon = Icons.AutoMirrored.Outlined.ReceiptLong,
                     title = stringResource(R.string.empty_dashboard_title),
                     body = stringResource(R.string.empty_dashboard_body),
-                    actionLabel = stringResource(R.string.empty_dashboard_action),
-                    onAction = onOpenSettings,
+                    actionLabel = stringResource(
+                        if (autoSms) R.string.empty_dashboard_action else R.string.empty_dashboard_add,
+                    ),
+                    onAction = if (autoSms) onOpenSettings else onOpenAdd,
+                    secondaryActionLabel = stringResource(
+                        if (autoSms) R.string.empty_dashboard_add else R.string.empty_dashboard_paste,
+                    ),
+                    onSecondaryAction = if (autoSms) onOpenAdd else onOpenSettings,
                 )
             }
         } else {

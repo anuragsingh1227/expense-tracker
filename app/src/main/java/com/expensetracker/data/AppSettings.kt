@@ -17,4 +17,13 @@ object AppSettings {
 
     /** Epoch millis until which PIN entry is locked after too many failures. */
     const val APP_LOCK_LOCKOUT_UNTIL = "app_lock_lockout_until"
+
+    /** Consecutive PIN failures. Persisted so force-stop cannot reset the lockout counter. */
+    const val APP_LOCK_PIN_FAILURES = "app_lock_pin_failures"
+
+    /**
+     * Credit-card billing cycle start day of month (1–28). 1 = calendar month.
+     * Example: 15 → 15th of this month through 14th of next.
+     */
+    const val CC_BILLING_CYCLE_START_DAY = "cc_billing_cycle_start_day"
 }

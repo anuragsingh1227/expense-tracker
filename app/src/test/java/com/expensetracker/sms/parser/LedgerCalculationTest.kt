@@ -129,14 +129,11 @@ class LedgerCalculationTest {
         assertThat(SpendMath.netCashFlow(income, spend, invest).amount)
             .isEqualTo(BigDecimal("43664.00"))
 
-        // Category bars must reconcile to spend (skill: withOtherBucket)
-        val byCat = aug.filter(LedgerBuckets::isSpend)
-            .groupBy { it.category }
-            .map { (cat, rows) ->
-                com.expensetracker.data.repository.CategorySpend(
-                    cat,
-                    rows.fold(Money.ZERO) { a, t -> a + t.amount },
-                )
+        // Category bars must reconcile to spend after refunds are netted
+        val byCat = LedgerBuckets.spendByCategory(aug)
+            .entries
+            .map { (cat, amount) ->
+                com.expensetracker.data.repository.CategorySpend(cat, amount)
             }
             .sortedByDescending { it.amount.amount }
             .take(2)
@@ -169,6 +166,8 @@ class LedgerCalculationTest {
         val net = LedgerBuckets.spend(listOf(spend, refund))
         assertThat(net.amount).isEqualTo(BigDecimal.ZERO.setScale(2))
         assertThat(LedgerBuckets.income(listOf(spend, refund)).amount).isEqualTo(BigDecimal.ZERO.setScale(2))
+        val byCat = LedgerBuckets.spendByCategory(listOf(spend, refund))
+        assertThat(byCat.values.fold(Money.ZERO) { acc, m -> acc + m }).isEqualTo(net)
     }
 
     @Test
@@ -236,6 +235,24 @@ class LedgerCalculationTest {
             zone,
         )!!
         assertThat(LocalDate.ofInstant(instant, zone)).isEqualTo(LocalDate.of(2026, 8, 5))
+    }
+
+    @Test
+    fun `date extractor reads Axis compact stamp with comma and IST`() {
+        val body =
+            "INR 60000.00 credited\nA/c no. XX8291\n04-08-26, 07:32:27 IST\nUPI/P2A/024744670304/ANURAG SI/ICIC/Paym"
+        val instant = SmsDateExtractor.extractOrNull(body, zone)!!
+        assertThat(LocalDate.ofInstant(instant, zone)).isEqualTo(LocalDate.of(2026, 8, 4))
+        assertThat(instant.atZone(zone).toLocalTime()).isEqualTo(java.time.LocalTime.of(7, 32, 27))
+    }
+
+    @Test
+    fun `date extractor reads Axis compact stamp without comma`() {
+        val body =
+            "Debit INR 17383.00\nAxis Bank A/c XX8291\n15-06-26 20:43:26\nNEFT/MB/AXOMB16602145999/V"
+        val instant = SmsDateExtractor.extractOrNull(body, zone)!!
+        assertThat(LocalDate.ofInstant(instant, zone)).isEqualTo(LocalDate.of(2026, 6, 15))
+        assertThat(instant.atZone(zone).toLocalTime()).isEqualTo(java.time.LocalTime.of(20, 43, 26))
     }
 
     private fun docsImportFallback(): String = """

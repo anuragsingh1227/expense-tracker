@@ -11,6 +11,8 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.expensetracker.ExpenseApp
 import com.expensetracker.R
+import com.expensetracker.data.AppSettings
+import com.expensetracker.data.db.dao.SettingsDao
 import com.expensetracker.domain.model.Transaction
 import com.expensetracker.domain.model.TransactionType
 import com.expensetracker.ui.MainActivity
@@ -18,17 +20,29 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class TransactionNotifier @Inject constructor() {
+class TransactionNotifier @Inject constructor(
+    private val settingsDao: SettingsDao,
+) {
 
-    fun notify(context: Context, tx: Transaction) {
+    suspend fun notify(context: Context, tx: Transaction) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
                 PackageManager.PERMISSION_GRANTED
             if (!granted) return
         }
-        val prefix = if (tx.type == TransactionType.DEBIT) "Debited" else "Credited"
-        val title = "$prefix ${tx.amount.formatInr()}"
-        val subject = tx.merchant ?: tx.bank ?: "Transaction"
+        val amountsHidden = settingsDao.get(AppSettings.AMOUNTS_HIDDEN) == "true"
+        val isDebit = tx.type == TransactionType.DEBIT
+        val title = if (amountsHidden) {
+            context.getString(
+                if (isDebit) R.string.notify_debited_hidden else R.string.notify_credited_hidden,
+            )
+        } else {
+            context.getString(
+                if (isDebit) R.string.notify_debited else R.string.notify_credited,
+                tx.amount.formatInr(),
+            )
+        }
+        val subject = tx.merchant ?: tx.bank ?: context.getString(R.string.notify_fallback_subject)
         val text = "$subject • ${tx.category}"
 
         val intent = Intent(context, MainActivity::class.java)

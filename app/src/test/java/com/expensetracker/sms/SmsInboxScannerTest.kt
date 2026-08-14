@@ -34,7 +34,7 @@ class SmsInboxScannerTest {
         val repo = FakeTransactionRepository()
         val settings = FakeSettingsDao()
 
-        val result = SmsInboxScanner(source, SmsParser(), repo, settings, clock).scan()
+        val result = SmsInboxScanner(source, SmsParser(), repo, settings, clock, NoopStatements).scan()
 
         assertThat(result.examined).isEqualTo(3)
         assertThat(result.inserted).isEqualTo(1)
@@ -54,7 +54,7 @@ class SmsInboxScannerTest {
         }
         val source = RecordingSource(emptyList())
 
-        SmsInboxScanner(source, SmsParser(), FakeTransactionRepository(), settings, clock)
+        SmsInboxScanner(source, SmsParser(), FakeTransactionRepository(), settings, clock, NoopStatements)
             .scan(forceFullLookback = false)
 
         assertThat(source.lastSince).isEqualTo(1000L)
@@ -68,7 +68,7 @@ class SmsInboxScannerTest {
         }
         val source = RecordingSource(emptyList())
 
-        SmsInboxScanner(source, SmsParser(), FakeTransactionRepository(), settings, clock)
+        SmsInboxScanner(source, SmsParser(), FakeTransactionRepository(), settings, clock, NoopStatements)
             .scan(forceFullLookback = true)
 
         val expectedSince = now.toEpochMilli() - TimeUnit.DAYS.toMillis(90)
@@ -80,11 +80,11 @@ class SmsInboxScannerTest {
         val raw = RawSms("VM-HDFCBK", SampleSms.HDFC_DEBIT, now)
         val repo = FakeTransactionRepository()
         val settings = FakeSettingsDao()
-        val scanner = SmsInboxScanner(RecordingSource(listOf(raw)), SmsParser(), repo, settings, clock)
+        val scanner = SmsInboxScanner(RecordingSource(listOf(raw)), SmsParser(), repo, settings, clock, NoopStatements)
 
         val first = scanner.scan()
         settings.put(SettingsEntity(AppSettings.LAST_SMS_SCAN_MILLIS, "1"))
-        val second = SmsInboxScanner(RecordingSource(listOf(raw)), SmsParser(), repo, settings, clock).scan()
+        val second = SmsInboxScanner(RecordingSource(listOf(raw)), SmsParser(), repo, settings, clock, NoopStatements).scan()
 
         assertThat(first.inserted).isEqualTo(1)
         assertThat(second.inserted).isEqualTo(0)
@@ -101,12 +101,57 @@ class SmsInboxScannerTest {
             FakeTransactionRepository(),
             settings,
             clock,
+            NoopStatements,
         ).scan()
 
         assertThat(result.permissionDenied).isTrue()
         assertThat(result.examined).isEqualTo(0)
         assertThat(settings.get(AppSettings.INITIAL_BACKFILL_DONE)).isNull()
         assertThat(settings.get(AppSettings.LAST_SMS_SCAN_MILLIS)).isNull()
+    }
+
+    @Test
+    fun `credit card due SMS is ingested as a statement not a ledger row`() = runTest {
+        val due = RawSms("VM-HDFCBK", SampleSms.DUE_REMINDER_SPAM, now)
+        val debit = RawSms("VM-HDFCBK", SampleSms.HDFC_DEBIT, now.minusSeconds(60))
+        val statements = RecordingStatements()
+        val repo = FakeTransactionRepository()
+        val result = SmsInboxScanner(
+            RecordingSource(listOf(due, debit)),
+            SmsParser(),
+            repo,
+            FakeSettingsDao(),
+            clock,
+            statements,
+        ).scan()
+
+        assertThat(statements.ingested.map { it.body }).contains(SampleSms.DUE_REMINDER_SPAM)
+        assertThat(repo.stored).hasSize(1)
+        assertThat(result.inserted).isEqualTo(1)
+    }
+
+    private object NoopStatements : CardStatementIngestor {
+        override suspend fun ingest(sms: RawSms) = null
+    }
+
+    private class RecordingStatements : CardStatementIngestor {
+        val ingested = mutableListOf<RawSms>()
+        override suspend fun ingest(sms: RawSms): com.expensetracker.domain.model.CardStatement? {
+            if (com.expensetracker.sms.parser.CreditCardStatementParser.parse(sms) == null) return null
+            ingested += sms
+            return com.expensetracker.domain.model.CardStatement(
+                id = ingested.size.toLong(),
+                bank = "HDFC",
+                cardLast4 = null,
+                totalDue = null,
+                minDue = Money.ofRupees("1.00"),
+                dueDate = java.time.LocalDate.of(2024, 8, 12),
+                timestamp = sms.timestamp,
+                sender = sms.sender,
+                rawSms = sms.body,
+                dedupeHash = "stmt-${ingested.size}",
+            )
+        }
     }
 
     private object UnavailableSource : SmsMessageSource {
@@ -134,6 +179,8 @@ class SmsInboxScannerTest {
         override suspend fun delete(key: String) {
             map.remove(key)
         }
+
+        override fun observe(key: String): Flow<String?> = flowOf(map[key])
     }
 
     private class FakeTransactionRepository : TransactionRepository {

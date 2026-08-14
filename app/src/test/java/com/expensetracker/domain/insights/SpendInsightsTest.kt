@@ -26,6 +26,23 @@ class SpendInsightsTest {
     }
 
     @Test
+    fun `stackedMonths column total includes netted refunds`() {
+        val rows = listOf(
+            CategoryMonthSpend("Shopping", "2024-01", Money.ofRupees(1000)),
+            CategoryMonthSpend("Refund", "2024-01", Money.ofRupees("-200.00")),
+            CategoryMonthSpend("Shopping", "2024-02", Money.ofRupees(800)),
+        )
+        val stack = SpendInsights.stackedMonths(
+            rows = rows,
+            monthKeysOldestFirst = listOf("2024-01", "2024-02"),
+            topCategories = 2,
+        )
+        assertThat(stack[0].total.amount).isEqualTo(java.math.BigDecimal("800.00"))
+        assertThat(stack[0].segments.map { it.category }).containsExactly("Shopping")
+        assertThat(stack[1].total.amount).isEqualTo(java.math.BigDecimal("800.00"))
+    }
+
+    @Test
     fun `stackedMonths keeps top categories and folds rest into Other`() {
         val rows = listOf(
             CategoryMonthSpend("Food", "2024-01", Money.ofRupees(1000)),

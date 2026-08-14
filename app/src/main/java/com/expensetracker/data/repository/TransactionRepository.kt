@@ -1,16 +1,18 @@
 package com.expensetracker.data.repository
 
 import com.expensetracker.data.AppSettings
-import com.expensetracker.data.db.dao.CategoryMonthTotal
-import com.expensetracker.data.db.dao.CategoryTotal
 import com.expensetracker.data.db.dao.SettingsDao
 import com.expensetracker.data.db.dao.TransactionDao
 import com.expensetracker.data.db.entity.TransactionEntity
 import com.expensetracker.domain.insights.CategoryMonthSpend
+import com.expensetracker.domain.insights.LedgerBuckets
+import com.expensetracker.domain.insights.LedgerDedupe
 import com.expensetracker.domain.insights.SelfTransferLinker
+import com.expensetracker.domain.model.HashtagParser
 import com.expensetracker.domain.model.Money
 import com.expensetracker.domain.model.PaymentMode
 import com.expensetracker.domain.model.Transaction
+import com.expensetracker.domain.model.TransactionExtras
 import com.expensetracker.domain.model.TransactionType
 import com.expensetracker.sms.parser.SmsParser
 import kotlinx.coroutines.flow.Flow
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.map
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Instant
+import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -68,6 +71,7 @@ class TransactionRepositoryImpl @Inject constructor(
 ) : TransactionRepository {
 
     override suspend fun insertIfNew(tx: Transaction): Boolean {
+        if (isFuzzyDuplicate(tx)) return false
         val id = dao.insert(tx.toEntity())
         return id != -1L
     }
@@ -110,19 +114,20 @@ class TransactionRepositoryImpl @Inject constructor(
         dao.observeInvestmentTotal(from, to).map { it.toMoney() }
 
     override fun observeCategorySpend(from: Instant, to: Instant, limit: Int): Flow<List<CategorySpend>> =
-        dao.observeCategoryTotals(from, to, limit).map { rows ->
-            rows.map { CategorySpend(it.category, it.total.toMoney()) }
+        dao.searchBetween(null, from, to).map { rows ->
+            LedgerBuckets.spendByCategory(rows.map { it.toDomain() })
+                .entries
+                .sortedByDescending { it.value.amount }
+                .take(limit)
+                .map { CategorySpend(it.key, it.value) }
         }
 
     override fun observeCategoryMonthSpend(from: Instant, to: Instant): Flow<List<CategoryMonthSpend>> =
-        dao.observeCategoryMonthTotals(from, to).map { rows ->
-            rows.map {
-                CategoryMonthSpend(
-                    category = it.category,
-                    monthKey = it.monthKey,
-                    amount = it.total.toMoney(),
-                )
-            }
+        dao.searchBetween(null, from, to).map { rows ->
+            LedgerBuckets.spendByCategoryAndMonth(
+                rows.map { it.toDomain() },
+                ZoneId.systemDefault(),
+            )
         }
 
     override fun search(query: String?): Flow<List<Transaction>> =
@@ -134,11 +139,27 @@ class TransactionRepositoryImpl @Inject constructor(
 
     override suspend fun purgeNonTransactional(parser: SmsParser): Int {
         val spamIds = dao.getIdAndRawSms()
-            .filter { row -> row.rawSms.isNullOrBlank() || !parser.isTransactional(row.rawSms) }
+            .filter { row -> shouldPurgeImportedSms(row.rawSms, row.manuallyEdited, parser) }
             .map { it.id }
         if (spamIds.isEmpty()) return 0
         spamIds.chunked(200).forEach { dao.deleteByIds(it) }
         return spamIds.size
+    }
+
+    companion object {
+        /**
+         * Clean-spam must only remove imported SMS that the gate no longer accepts.
+         * Manual/cash rows (blank rawSms) and user-edited rows are never purged.
+         */
+        fun shouldPurgeImportedSms(
+            rawSms: String?,
+            manuallyEdited: Boolean,
+            parser: SmsParser,
+        ): Boolean {
+            if (manuallyEdited) return false
+            if (rawSms.isNullOrBlank()) return false
+            return !parser.isTransactional(rawSms)
+        }
     }
 
     override suspend fun reconcileSelfTransfers(ownerNames: List<String>?): Int {
@@ -153,6 +174,17 @@ class TransactionRepositoryImpl @Inject constructor(
     private suspend fun resolveConfiguredOwnerNames(): List<String> {
         val configured = settingsDao.get(AppSettings.OWNER_NAME)?.trim()
         return if (!configured.isNullOrEmpty()) listOf(configured) else emptyList()
+    }
+
+    /**
+     * Same payment arriving as both an app notification and a bank SMS:
+     * identical (timestamp, amount, last4, merchant) within 60 seconds.
+     */
+    private suspend fun isFuzzyDuplicate(tx: Transaction): Boolean {
+        val last4 = LedgerDedupe.last4(tx) ?: return false
+        val from = tx.timestamp.minusMillis(LedgerDedupe.WINDOW_MS)
+        val to = tx.timestamp.plusMillis(LedgerDedupe.WINDOW_MS)
+        return dao.findNearDuplicate(tx.amount.amount, last4, tx.merchant, from, to) != null
     }
 }
 
@@ -179,6 +211,9 @@ private fun Transaction.toEntity(): TransactionEntity = TransactionEntity(
     notes = notes,
     dedupeHash = dedupeHash,
     manuallyEdited = manuallyEdited,
+    tagsJson = TransactionExtras.tagsToJson(HashtagParser.merge(notes, tags)),
+    isSplit = isSplit,
+    splitJson = TransactionExtras.splitsToJson(splitShares),
 )
 
 private fun TransactionEntity.toDomain(): Transaction = Transaction(
@@ -201,4 +236,7 @@ private fun TransactionEntity.toDomain(): Transaction = Transaction(
     notes = notes,
     dedupeHash = dedupeHash,
     manuallyEdited = manuallyEdited,
+    tags = TransactionExtras.tagsFromJson(tagsJson),
+    isSplit = isSplit,
+    splitShares = TransactionExtras.splitsFromJson(splitJson),
 )
