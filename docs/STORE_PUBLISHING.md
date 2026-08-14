@@ -73,5 +73,5 @@ Upload `app-store-release.apk` or AAB if the store accepts it. Reuse the same si
 
 ## Versioning
 
-- `versionName` `1.2.1`, `versionCode` `111` (bump `versionCode` on every store upload)
+- `versionName` `1.2.2`, `versionCode` `112` (bump `versionCode` on every store upload)
 - Debug builds use `.debug` applicationId suffix so they can sit beside release installs

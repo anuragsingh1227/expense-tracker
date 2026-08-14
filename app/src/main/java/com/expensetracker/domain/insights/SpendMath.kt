@@ -19,10 +19,9 @@ object SpendMath {
         totalSpend: Money,
         otherLabel: String = "Other",
     ): List<CategorySpend> {
-        if (totalSpend.amount.signum() <= 0) return categories
         val shown = categories.fold(BigDecimal.ZERO) { acc, row -> acc + row.amount.amount }
         val remainder = totalSpend.amount.subtract(shown).setScale(2, RoundingMode.HALF_UP)
-        if (remainder.compareTo(BigDecimal("0.01")) < 0) return categories
+        if (remainder.abs().compareTo(BigDecimal("0.01")) < 0) return categories
         return categories + CategorySpend(otherLabel, Money(remainder))
     }
 

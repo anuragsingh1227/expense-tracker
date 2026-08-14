@@ -15,8 +15,8 @@ android {
         applicationId = "com.expensetracker.offline"
         minSdk = 29
         targetSdk = 34
-        versionCode = 111
-        versionName = "1.2.1"
+        versionCode = 112
+        versionName = "1.2.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }

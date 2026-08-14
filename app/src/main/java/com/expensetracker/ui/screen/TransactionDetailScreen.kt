@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -30,6 +31,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -44,7 +46,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -53,17 +57,22 @@ import androidx.lifecycle.viewModelScope
 import com.expensetracker.R
 import com.expensetracker.data.db.entity.LabelRuleEntity
 import com.expensetracker.data.repository.TransactionRepository
+import com.expensetracker.domain.model.HashtagParser
 import com.expensetracker.domain.model.Money
 import com.expensetracker.domain.model.PaymentMode
+import com.expensetracker.domain.model.SplitShare
 import com.expensetracker.domain.model.Transaction
 import com.expensetracker.domain.model.TransactionType
 import com.expensetracker.sms.parser.Categories
 import com.expensetracker.sms.parser.LabelRuleCatalog
 import com.expensetracker.sms.parser.MerchantCatalog
+import com.expensetracker.ui.components.AmountVisibilityToggle
+import com.expensetracker.ui.components.DatePickerField
 import com.expensetracker.ui.components.LoadingBlock
 import com.expensetracker.ui.components.MetaRow
 import com.expensetracker.ui.components.StatusPill
 import com.expensetracker.ui.components.SurfaceCard
+import com.expensetracker.ui.components.TagChipRow
 import com.expensetracker.ui.components.maskableFormatInr
 import com.expensetracker.ui.theme.ExpenseColors
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -91,6 +100,9 @@ class TransactionDetailViewModel @Inject constructor(
     private val _saveEvent = MutableStateFlow(0)
     val saveEvent: StateFlow<Int> = _saveEvent.asStateFlow()
 
+    @Volatile
+    private var saving = false
+
     fun load(id: Long) {
         viewModelScope.launch { _state.value = repository.find(id) }
     }
@@ -100,17 +112,23 @@ class TransactionDetailViewModel @Inject constructor(
     }
 
     fun save(updated: Transaction, rememberForMerchant: Boolean) {
+        if (saving) return
+        saving = true
         viewModelScope.launch {
-            repository.update(updated.copy(manuallyEdited = true))
-            if (rememberForMerchant) {
-                val key = updated.merchant?.takeIf { it.isNotBlank() }
-                    ?: updated.narration?.takeIf { it.isNotBlank() }
-                if (key != null) {
-                    merchantCatalog.remember(key, updated.category)
+            try {
+                repository.update(updated.copy(manuallyEdited = true))
+                if (rememberForMerchant) {
+                    val key = updated.merchant?.takeIf { it.isNotBlank() }
+                        ?: updated.narration?.takeIf { it.isNotBlank() }
+                    if (key != null) {
+                        merchantCatalog.remember(key, updated.category)
+                    }
                 }
+                _state.value = repository.find(updated.id)
+                _saveEvent.value += 1
+            } finally {
+                saving = false
             }
-            _state.value = repository.find(updated.id)
-            _saveEvent.value += 1
         }
     }
 
@@ -188,6 +206,8 @@ class TransactionDetailViewModel @Inject constructor(
 fun TransactionDetailScreen(
     transactionId: Long,
     onBack: () -> Unit,
+    amountsHidden: Boolean = false,
+    onToggleAmountsHidden: () -> Unit = {},
     viewModel: TransactionDetailViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(transactionId) { viewModel.load(transactionId) }
@@ -195,6 +215,8 @@ fun TransactionDetailScreen(
     val ruleMessage by viewModel.ruleSavedMessage.collectAsState()
     val saveEvent by viewModel.saveEvent.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val clipboard = LocalClipboardManager.current
+    val copiedSmsMessage = stringResource(R.string.sms_copied)
     val scope = rememberCoroutineScope()
     val savedMessage = stringResource(R.string.transaction_saved)
     var ruleNeedsCriteria by remember { mutableStateOf(false) }
@@ -241,6 +263,12 @@ fun TransactionDetailScreen(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
+                actions = {
+                    AmountVisibilityToggle(
+                        amountsHidden = amountsHidden,
+                        onToggle = onToggleAmountsHidden,
+                    )
+                },
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -255,16 +283,24 @@ fun TransactionDetailScreen(
         var category by remember(current.id, current.category) { mutableStateOf(current.category) }
         var type by remember(current.id, current.type) { mutableStateOf(current.type) }
         var notes by remember(current.id) { mutableStateOf(current.notes.orEmpty()) }
+        var selectedTags by remember(current.id) {
+            mutableStateOf(HashtagParser.merge(current.notes, current.tags).toSet())
+        }
+        var splitOn by remember(current.id, current.isSplit) { mutableStateOf(current.isSplit) }
+        var splitRows by remember(current.id) {
+            mutableStateOf(
+                current.splitShares.map { it.name to it.amountOwed.amount.stripTrailingZeros().toPlainString() }
+                    .ifEmpty { listOf("" to "") },
+            )
+        }
         var amountText by remember(current.id, current.amount) {
             mutableStateOf(current.amount.amount.stripTrailingZeros().toPlainString())
         }
         var merchantText by remember(current.id, current.merchant) {
             mutableStateOf(current.merchant.orEmpty())
         }
-        var dateText by remember(current.id, current.timestamp) {
-            mutableStateOf(
-                current.timestamp.atZone(ZoneId.systemDefault()).toLocalDate().toString(),
-            )
+        var date by remember(current.id, current.timestamp) {
+            mutableStateOf(current.timestamp.atZone(ZoneId.systemDefault()).toLocalDate())
         }
         var rememberMerchant by remember(current.id) { mutableStateOf(true) }
 
@@ -345,13 +381,17 @@ fun TransactionDetailScreen(
                 )
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(
-                    value = amountText,
-                    onValueChange = { amountText = it.filter { c -> c.isDigit() || c == '.' } },
+                    value = if (amountsHidden) stringResource(R.string.amount_hidden_mask) else amountText,
+                    onValueChange = {
+                        if (!amountsHidden) amountText = it.filter { c -> c.isDigit() || c == '.' }
+                    },
                     label = { Text(stringResource(R.string.label_amount)) },
                     singleLine = true,
+                    readOnly = amountsHidden,
+                    enabled = !amountsHidden,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
-                    prefix = { Text("₹") },
+                    prefix = if (amountsHidden) null else ({ Text("₹") }),
                 )
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(
@@ -363,15 +403,7 @@ fun TransactionDetailScreen(
                     shape = RoundedCornerShape(14.dp),
                 )
                 Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = dateText,
-                    onValueChange = { dateText = it },
-                    label = { Text(stringResource(R.string.label_date)) },
-                    supportingText = { Text(stringResource(R.string.label_date_hint)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                )
+                DatePickerField(date = date, onDateChange = { date = it })
             }
 
             SurfaceCard {
@@ -384,12 +416,31 @@ fun TransactionDetailScreen(
                 MetaRow(stringResource(R.string.label_reference), current.referenceNumber ?: "—")
                 current.balance?.let {
                     Spacer(Modifier.height(12.dp))
-                    MetaRow(stringResource(R.string.label_balance_after), it.formatInr())
+                    MetaRow(stringResource(R.string.label_balance_after), it.maskableFormatInr())
                 }
             }
 
             SurfaceCard {
-                Text(stringResource(R.string.label_raw_sms), style = MaterialTheme.typography.labelMedium)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(stringResource(R.string.label_raw_sms), style = MaterialTheme.typography.labelMedium)
+                    if (!current.rawSms.isNullOrBlank()) {
+                        IconButton(
+                            onClick = {
+                                clipboard.setText(AnnotatedString(current.rawSms.orEmpty()))
+                                scope.launch { snackbarHostState.showSnackbar(copiedSmsMessage) }
+                            },
+                        ) {
+                            Icon(
+                                Icons.Outlined.ContentCopy,
+                                contentDescription = stringResource(R.string.action_copy_sms),
+                            )
+                        }
+                    }
+                }
                 Spacer(Modifier.height(6.dp))
                 Text(
                     current.rawSms ?: "—",
@@ -565,12 +616,127 @@ fun TransactionDetailScreen(
             )
             OutlinedTextField(
                 value = notes,
-                onValueChange = { notes = it },
+                onValueChange = { value ->
+                    notes = value
+                    selectedTags = HashtagParser.merge(value, selectedTags).toSet()
+                },
                 label = { Text(stringResource(R.string.label_notes)) },
+                supportingText = { Text(stringResource(R.string.label_notes_hashtag_hint)) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
                 minLines = 2,
             )
+
+            Text(stringResource(R.string.label_tags), style = MaterialTheme.typography.titleMedium)
+            TagChipRow(
+                selectedTags = selectedTags,
+                onChange = { selectedTags = it },
+            )
+
+            SurfaceCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.split_toggle_title),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            stringResource(R.string.split_toggle_body),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = splitOn, onCheckedChange = { splitOn = it })
+                }
+                if (splitOn) {
+                    Spacer(Modifier.height(12.dp))
+                    splitRows.forEachIndexed { index, (name, amount) ->
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            OutlinedTextField(
+                                value = name,
+                                onValueChange = { value ->
+                                    splitRows = splitRows.toMutableList().also {
+                                        it[index] = value to amount
+                                    }
+                                },
+                                label = { Text(stringResource(R.string.split_person_name)) },
+                                singleLine = true,
+                                modifier = Modifier.weight(1.2f),
+                                shape = RoundedCornerShape(14.dp),
+                            )
+                            OutlinedTextField(
+                                value = if (amountsHidden) stringResource(R.string.amount_hidden_mask) else amount,
+                                onValueChange = { value ->
+                                    if (amountsHidden) return@OutlinedTextField
+                                    splitRows = splitRows.toMutableList().also {
+                                        it[index] = name to value.filter { c -> c.isDigit() || c == '.' }
+                                    }
+                                },
+                                label = { Text(stringResource(R.string.split_amount_owed)) },
+                                singleLine = true,
+                                readOnly = amountsHidden,
+                                enabled = !amountsHidden,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(14.dp),
+                                prefix = if (amountsHidden) null else ({ Text("₹") }),
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    TextButton(
+                        onClick = { splitRows = splitRows + ("" to "") },
+                    ) { Text(stringResource(R.string.split_add_person)) }
+                    val parsedAmountForSplit = runCatching { Money.ofRupees(amountText.trim()) }.getOrNull()
+                    val splitSharesPreview = splitRows.mapNotNull { (name, amt) ->
+                        val n = name.trim()
+                        val money = runCatching { Money.ofRupees(amt.trim()) }.getOrNull()
+                        if (n.isEmpty() || money == null || money.amount.signum() <= 0) null
+                        else SplitShare(n, money)
+                    }
+                    if (parsedAmountForSplit != null && splitSharesPreview.isNotEmpty()) {
+                        val remaining = parsedAmountForSplit.amount.subtract(
+                            splitSharesPreview.fold(java.math.BigDecimal.ZERO) { acc, s -> acc + s.amountOwed.amount },
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            stringResource(
+                                R.string.split_remaining,
+                                Money(remaining.setScale(2, java.math.RoundingMode.HALF_UP)).maskableFormatInr(),
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (remaining.signum() < 0) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                    val splitInvalid = splitOn && (
+                        splitSharesPreview.isEmpty() ||
+                            (
+                                parsedAmountForSplit != null &&
+                                    splitSharesPreview.fold(java.math.BigDecimal.ZERO) { acc, s ->
+                                        acc + s.amountOwed.amount
+                                    } > parsedAmountForSplit.amount
+                                )
+                        )
+                    if (splitInvalid) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            stringResource(R.string.split_invalid),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -590,19 +756,31 @@ fun TransactionDetailScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
+                val parsedAmountForSave = runCatching { Money.ofRupees(amountText.trim()) }.getOrNull()
+                val amountValid = parsedAmountForSave != null && parsedAmountForSave.amount.signum() > 0
+                val sharesForSave = if (splitOn) {
+                    splitRows.mapNotNull { (name, amt) ->
+                        val n = name.trim()
+                        val money = runCatching { Money.ofRupees(amt.trim()) }.getOrNull()
+                        if (n.isEmpty() || money == null || money.amount.signum() <= 0) null
+                        else SplitShare(n, money)
+                    }
+                } else {
+                    emptyList()
+                }
+                val splitTotal = sharesForSave.fold(java.math.BigDecimal.ZERO) { acc, s -> acc + s.amountOwed.amount }
+                val splitOk = !splitOn || (
+                    sharesForSave.isNotEmpty() &&
+                        parsedAmountForSave != null &&
+                        splitTotal <= parsedAmountForSave.amount
+                    )
                 Button(
                     onClick = {
-                        val parsedAmount = runCatching {
-                            Money.ofRupees(amountText.trim())
-                        }.getOrNull()
-                        val parsedDate = runCatching {
-                            LocalDate.parse(dateText.trim())
-                        }.getOrNull()
-                        if (parsedAmount == null || parsedAmount.amount.signum() <= 0) return@Button
-                        if (parsedDate == null) return@Button
+                        val parsedAmount = parsedAmountForSave ?: return@Button
+                        if (!amountValid || !splitOk) return@Button
                         val zone = ZoneId.systemDefault()
                         val oldLocal = current.timestamp.atZone(zone)
-                        val newTimestamp = parsedDate
+                        val newTimestamp = date
                             .atTime(oldLocal.toLocalTime())
                             .atZone(zone)
                             .toInstant()
@@ -614,10 +792,14 @@ fun TransactionDetailScreen(
                                 category = category.trim().ifEmpty { current.category },
                                 notes = notes.trim().ifEmpty { null },
                                 type = type,
+                                tags = HashtagParser.merge(notes, selectedTags),
+                                isSplit = splitOn && sharesForSave.isNotEmpty(),
+                                splitShares = sharesForSave,
                             ),
                             rememberForMerchant = rememberMerchant,
                         )
                     },
+                    enabled = amountValid && splitOk,
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 52.dp),

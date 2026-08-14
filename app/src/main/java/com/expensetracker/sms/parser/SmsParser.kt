@@ -29,8 +29,7 @@ class SmsParser(
         val type = detectType(body)
         val bank = BankSenders.identify(sms.sender)
         val merchantMatch = merchants.match(body)
-        val merchant = merchantMatch?.displayName ?: extractMerchant(body)
-        val labeled = labelRules.match(sms.sender, body, merchant)
+        val labeled = labelRules.match(sms.sender, body, merchantMatch?.displayName ?: extractMerchant(body))
         // Ledger-correctness categories (Transfer/Refund) must win over merchant/dictionary
         // matches — e.g. "Refund from AMAZON" must not be booked as Shopping income.
         val category = labeled ?: resolveAutoCategory(body, type, merchantMatch?.category)
@@ -41,6 +40,7 @@ class SmsParser(
         val accountLast4 = ACCOUNT_LAST4.find(body)?.groupValues?.get(1)
         val cardLast4 = CARD_LAST4.find(body)?.groupValues?.get(1)
         val upiId = UPI_ID.find(body)?.value
+        val merchant = resolveMerchant(merchantMatch?.displayName ?: extractMerchant(body), upiId)
         val referenceNumber = extractReference(body)
         val balance = extractBalance(body)
         val narration = extractNarration(body)
@@ -124,6 +124,10 @@ class SmsParser(
             val name = sanitizeMerchantCandidate(match.groupValues[1]) ?: return@let
             if (isPlausibleMerchant(name)) return name
         }
+        MERCHANT_BY.find(body)?.let { match ->
+            val name = sanitizeMerchantCandidate(match.groupValues[1]) ?: return@let
+            if (isPlausibleMerchant(name)) return name
+        }
         // "for UPI/123456-SWIGGY" or "for UPI/SWIGGY" — the name after the slash/dash.
         UPI_MERCHANT.find(body)?.let { match ->
             val name = match.groupValues[1].trim().trimEnd('.', ',')
@@ -140,6 +144,16 @@ class SmsParser(
         name = name.replace(Regex("""(?i)\s+dispute\s+call\b.*$"""), "").trim()
         name = name.trimEnd('.', ',', ';', ':').trim()
         return name.takeIf { it.length >= 2 }
+    }
+
+    /** Prefer a full VPA (`user@okicici`) over the local-part captured by `to …`. */
+    private fun resolveMerchant(extracted: String?, upiId: String?): String? {
+        if (upiId != null && extracted != null &&
+            upiId.startsWith(extracted, ignoreCase = true)
+        ) {
+            return upiId
+        }
+        return extracted ?: upiId
     }
 
     /**
@@ -253,6 +267,15 @@ class SmsParser(
     private fun isSelfOrCardTransfer(upper: String): Boolean {
         if (upper.contains("BILLPAY") || upper.contains("BILL PAY")) return true
         if (upper.contains("CREDIT CARD PAYMENT") || upper.contains("CC PAYMENT")) return true
+        // Own-account move: "Transferred Rs.5000 from A/C x1234 to A/C x5678"
+        val accountLast4s = ACCOUNT_LAST4.findAll(upper).map { it.groupValues[1] }.distinct().toList()
+        if (accountLast4s.size >= 2 &&
+            (upper.contains("TRANSFERRED") || upper.contains("TRANSFER FROM") ||
+                (upper.contains("FROM") && upper.contains("TO") &&
+                    (upper.contains("A/C") || upper.contains("ACCT") || upper.contains("ACCOUNT"))))
+        ) {
+            return true
+        }
         if (upper.contains("CREDIT CARD BILL") || upper.contains("CC BILL")) return true
         // Axis compact card-bill template: "CRD-PMNT-530562****0887"
         if (upper.contains("CRD-PMNT") || upper.contains("CRD PMNT") || upper.contains("CRDPMNT")) return true
@@ -336,12 +359,12 @@ class SmsParser(
     companion object {
         private val DEBIT_WORDS = listOf(
             "DEBITED", "DEBIT", "SPENT", "PAID", "PURCHASE", "WITHDRAWN", "WITHDRAWAL",
-            "CHARGED", "TXN OF", "TRANSFERRED", "SENT", "PAYMENT OF",
+            "CHARGED", "TXN OF", "TRANSFERRED", "SENT", "PAYMENT OF", "DEBITED BY",
         )
         private val CREDIT_WORDS = listOf(
             "CREDITED", "CREDIT", "RECEIVED", "REFUND", "DEPOSITED", "SALARY",
         )
-        private val ACCOUNT_LAST4 = Regex("""(?i)a/c(?:\s*(?:no)?\.?)?\s*[Xx*]{2,}(\d{4})""")
+        private val ACCOUNT_LAST4 = Regex("""(?i)a/c(?:\s*(?:no)?\.?)?\s*[Xx*]{0,6}(\d{4})""")
         private val CARD_LAST4 =
             Regex("""(?i)card(?:\s*(?:no)?\.?)?\s*(?:ending(?:\s*with)?)?\s*(?:[Xx*]{2,})?\s*(\d{4})\b""")
         private val UPI_ID = Regex("""\b[a-zA-Z0-9._-]{2,}@[a-zA-Z]{2,}\b""")
@@ -352,7 +375,9 @@ class SmsParser(
         private val MERCHANT_AT =
             Regex("""(?i)\bat\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|through|upi|ref|avl|bal|info|to\s+dispute)|\s*[.,;]|$)""")
         private val MERCHANT_TO =
-            Regex("""(?i)\bto\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|through|upi|ref|avl|bal|info|to\s+dispute)|\s*[.,;]|$)""")
+            Regex("""(?i)\bto\s+([A-Z0-9][A-Z0-9 .&'*/@-]{2,40}?)(?=\s+(?:via|on|through|upi|ref|avl|bal|info|to\s+dispute)|\s*[.,;]|$)""")
+        private val MERCHANT_BY =
+            Regex("""(?i)\bby\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|through|upi|ref|avl|bal|info|to\s+dispute)|\s*[.,;]|$)""")
         private val DISPUTE_OR_HELPLINE =
             Regex("""(?i)\b(?:dispute|helpline|customer\s+care|toll\s*free)\b""")
         private val PHONE_HEAVY_MERCHANT =

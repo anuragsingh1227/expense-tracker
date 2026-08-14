@@ -7,14 +7,19 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.expensetracker.data.OwnerNameProvider
 import com.expensetracker.data.db.ExpenseDatabase
 import com.expensetracker.data.db.dao.BudgetDao
+import com.expensetracker.data.db.dao.CardStatementDao
 import com.expensetracker.data.db.dao.CategoryDao
 import com.expensetracker.data.db.dao.LabelRuleDao
 import com.expensetracker.data.db.dao.MerchantDao
 import com.expensetracker.data.db.dao.SettingsDao
 import com.expensetracker.data.db.dao.TransactionDao
+import com.expensetracker.data.repository.CardStatementRepository
+import com.expensetracker.data.repository.CardStatementRepositoryImpl
 import com.expensetracker.data.repository.TransactionRepository
 import com.expensetracker.data.repository.TransactionRepositoryImpl
 import com.expensetracker.sms.AndroidSmsInboxSource
+import com.expensetracker.sms.CardStatementImporter
+import com.expensetracker.sms.CardStatementIngestor
 import com.expensetracker.sms.SmsMessageSource
 import com.expensetracker.sms.parser.LabelRuleCatalog
 import com.expensetracker.sms.parser.MerchantCatalog
@@ -106,11 +111,45 @@ object DatabaseModule {
         override fun migrate(db: SupportSQLiteDatabase) = Unit
     }
 
+    /**
+     * v3 → v4: tags/split columns on transactions + card statement table.
+     * Additive only — v1.1.8 JSON restores still apply (new fields default empty).
+     */
+    private val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `transactions` ADD COLUMN `tagsJson` TEXT")
+            db.execSQL("ALTER TABLE `transactions` ADD COLUMN `isSplit` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE `transactions` ADD COLUMN `splitJson` TEXT")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `card_statements` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `bank` TEXT,
+                    `cardLast4` TEXT,
+                    `totalDue` TEXT,
+                    `minDue` TEXT,
+                    `dueDateEpochDay` INTEGER NOT NULL,
+                    `timestamp` INTEGER NOT NULL,
+                    `sender` TEXT,
+                    `rawSms` TEXT,
+                    `dedupeHash` TEXT NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_card_statements_dedupeHash` ON `card_statements` (`dedupeHash`)",
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_card_statements_dueDateEpochDay` ON `card_statements` (`dueDateEpochDay`)",
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext ctx: Context): ExpenseDatabase =
         Room.databaseBuilder(ctx, ExpenseDatabase::class.java, ExpenseDatabase.NAME)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .build()
 
     @Provides fun provideTransactionDao(db: ExpenseDatabase): TransactionDao = db.transactionDao()
@@ -120,6 +159,7 @@ object DatabaseModule {
     @Provides fun provideBudgetDao(db: ExpenseDatabase): BudgetDao = db.budgetDao()
     @Provides fun provideBankDao(db: ExpenseDatabase): com.expensetracker.data.db.dao.BankDao = db.bankDao()
     @Provides fun provideSettingsDao(db: ExpenseDatabase): SettingsDao = db.settingsDao()
+    @Provides fun provideCardStatementDao(db: ExpenseDatabase): CardStatementDao = db.cardStatementDao()
 
     @Provides @Singleton fun provideClock(): Clock = Clock.systemDefaultZone()
 
@@ -144,6 +184,14 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindTransactionRepository(impl: TransactionRepositoryImpl): TransactionRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindCardStatementRepository(impl: CardStatementRepositoryImpl): CardStatementRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindCardStatementIngestor(impl: CardStatementImporter): CardStatementIngestor
 
     @Binds
     @Singleton

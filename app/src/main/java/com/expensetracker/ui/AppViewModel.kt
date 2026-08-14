@@ -9,14 +9,18 @@ import com.expensetracker.data.backup.BackupImportResult
 import com.expensetracker.data.backup.BackupRepository
 import com.expensetracker.data.db.dao.SettingsDao
 import com.expensetracker.data.db.entity.SettingsEntity
+import com.expensetracker.data.repository.CardStatementRepository
 import com.expensetracker.data.repository.TransactionRepository
 import com.expensetracker.domain.security.AppForegroundTracker
 import com.expensetracker.domain.security.BiometricAuthenticator
 import com.expensetracker.domain.security.PinHasher
+import com.expensetracker.sms.CardDueReminderScheduler
+import com.expensetracker.sms.CardStatementIngestor
 import com.expensetracker.sms.SmsInboxScanner
 import com.expensetracker.sms.SmsScanResult
 import com.expensetracker.sms.parser.RawSms
 import com.expensetracker.sms.parser.SmsParser
+import com.expensetracker.ui.widget.MonthSpendWidgetProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.InputStream
@@ -48,6 +53,7 @@ data class SmsTextImportResult(
     val inserted: Int,
     val skipped: Int,
     val rejected: Int,
+    val statements: Int = 0,
 )
 
 /**
@@ -75,6 +81,9 @@ class AppViewModel @Inject constructor(
     private val ownerNameProvider: OwnerNameProvider,
     private val parser: SmsParser,
     private val clock: Clock,
+    private val cardStatements: CardStatementIngestor,
+    private val cardStatementRepository: CardStatementRepository,
+    private val cardDueReminderScheduler: CardDueReminderScheduler,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
@@ -92,11 +101,16 @@ class AppViewModel @Inject constructor(
     /** Persisted "hide rupee amounts" toggle — shared app-wide via CompositionLocal. */
     val amountsHidden: StateFlow<Boolean> = _amountsHidden.asStateFlow()
 
+    /** False until Room has been read (or the user toggled). MainActivity waits on
+     *  this so Spends never flashes real figures before hide-amounts is known. */
+    private val _amountsHiddenReady = MutableStateFlow(false)
+    val amountsHiddenReady: StateFlow<Boolean> = _amountsHiddenReady.asStateFlow()
+
     /** True once either the initial load finished or the user has toggled — guards
      *  against the slow initial settings read overwriting a fast user tap. */
     private var amountsHiddenResolved = false
 
-    /** In-memory consecutive PIN failures (reset on success or process death). */
+    /** Cached consecutive PIN failures, synced from Room so force-stop cannot reset lockout. */
     private var pinFailureCount = 0
 
     init {
@@ -111,6 +125,8 @@ class AppViewModel @Inject constructor(
                 _amountsHidden.value = persisted
                 amountsHiddenResolved = true
             }
+            MonthSpendWidgetProvider.applyAmountsHidden(appContext, _amountsHidden.value)
+            _amountsHiddenReady.value = true
         }
         viewModelScope.launch {
             // drop(1): ignore the initial sentinel value emitted before any real backgrounding.
@@ -133,25 +149,33 @@ class AppViewModel @Inject constructor(
 
     fun toggleAmountsHidden() {
         amountsHiddenResolved = true
+        _amountsHiddenReady.value = true
         val next = !_amountsHidden.value
         _amountsHidden.value = next
         viewModelScope.launch {
             settingsDao.put(SettingsEntity(AppSettings.AMOUNTS_HIDDEN, next.toString()))
+            MonthSpendWidgetProvider.applyAmountsHidden(appContext, next)
         }
     }
 
-    private suspend fun loadAppLockState() {
+    private suspend fun loadAppLockState(relock: Boolean = true) {
         val enabled = settingsDao.get(AppSettings.APP_LOCK_ENABLED) == "true"
         val biometricEnabled = settingsDao.get(AppSettings.APP_LOCK_BIOMETRIC_ENABLED) == "true"
         val lockoutUntil = settingsDao.get(AppSettings.APP_LOCK_LOCKOUT_UNTIL)?.toLongOrNull() ?: 0L
         val now = Instant.now(clock).toEpochMilli()
         val activeLockout = if (lockoutUntil > now) lockoutUntil else 0L
+        pinFailureCount = settingsDao.get(AppSettings.APP_LOCK_PIN_FAILURES)?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+        val locked = when {
+            !enabled -> false
+            relock -> true
+            else -> _appLockState.value.locked
+        }
         _appLockState.value = AppLockUiState(
             loading = false,
             enabled = enabled,
             biometricAvailable = BiometricAuthenticator.isAvailable(appContext),
             biometricEnabled = biometricEnabled,
-            locked = enabled,
+            locked = locked,
             lockoutUntilMillis = activeLockout,
         )
     }
@@ -176,6 +200,8 @@ class AppViewModel @Inject constructor(
                     SettingsEntity(AppSettings.APP_LOCK_PIN_SALT, salt),
                     SettingsEntity(AppSettings.APP_LOCK_PIN_HASH, hash),
                     SettingsEntity(AppSettings.APP_LOCK_ENABLED, "true"),
+                    SettingsEntity(AppSettings.APP_LOCK_PIN_FAILURES, "0"),
+                    SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, "0"),
                 ),
             )
             pinFailureCount = 0
@@ -219,6 +245,8 @@ class AppViewModel @Inject constructor(
                 listOf(
                     SettingsEntity(AppSettings.APP_LOCK_ENABLED, "false"),
                     SettingsEntity(AppSettings.APP_LOCK_BIOMETRIC_ENABLED, "false"),
+                    SettingsEntity(AppSettings.APP_LOCK_PIN_FAILURES, "0"),
+                    SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, "0"),
                 ),
             )
             pinFailureCount = 0
@@ -260,9 +288,12 @@ class AppViewModel @Inject constructor(
             val backgroundedDuringVerify = AppForegroundTracker.backgroundedAtMillis.value != verifyStartedAt
             if (ok) {
                 pinFailureCount = 0
-                if (_appLockState.value.lockoutUntilMillis != 0L) {
-                    settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, "0"))
-                }
+                settingsDao.putAll(
+                    listOf(
+                        SettingsEntity(AppSettings.APP_LOCK_PIN_FAILURES, "0"),
+                        SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, "0"),
+                    ),
+                )
                 _appLockState.value = _appLockState.value.copy(
                     locked = backgroundedDuringVerify,
                     pinError = false,
@@ -273,13 +304,19 @@ class AppViewModel @Inject constructor(
                 if (pinFailureCount >= MAX_PIN_FAILURES) {
                     val until = Instant.now(clock).toEpochMilli() + LOCKOUT_DURATION_MS
                     pinFailureCount = 0
-                    settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, until.toString()))
+                    settingsDao.putAll(
+                        listOf(
+                            SettingsEntity(AppSettings.APP_LOCK_PIN_FAILURES, "0"),
+                            SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, until.toString()),
+                        ),
+                    )
                     _appLockState.value = _appLockState.value.copy(
                         locked = true,
                         pinError = true,
                         lockoutUntilMillis = until,
                     )
                 } else {
+                    settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_PIN_FAILURES, pinFailureCount.toString()))
                     _appLockState.value = _appLockState.value.copy(
                         locked = true,
                         pinError = true,
@@ -300,7 +337,12 @@ class AppViewModel @Inject constructor(
             lockoutUntilMillis = 0L,
         )
         viewModelScope.launch {
-            settingsDao.put(SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, "0"))
+            settingsDao.putAll(
+                listOf(
+                    SettingsEntity(AppSettings.APP_LOCK_PIN_FAILURES, "0"),
+                    SettingsEntity(AppSettings.APP_LOCK_LOCKOUT_UNTIL, "0"),
+                ),
+            )
         }
     }
 
@@ -375,17 +417,21 @@ class AppViewModel @Inject constructor(
             var inserted = 0
             var skipped = 0
             var rejected = 0
+            var statements = 0
             val now = Instant.now(clock)
 
             withContext(Dispatchers.IO) {
                 chunks.forEachIndexed { index, body ->
-                    val tx = parser.parse(
-                        RawSms(
+                    val sms = RawSms(
                             sender = senderHint,
                             body = body,
                             timestamp = now.minusSeconds(index.toLong()),
-                        ),
-                    )
+                        )
+                    if (cardStatements.ingest(sms) != null) {
+                        statements++
+                        return@forEachIndexed
+                    }
+                    val tx = parser.parse(sms)
                     if (tx == null) {
                         rejected++
                         return@forEachIndexed
@@ -399,6 +445,7 @@ class AppViewModel @Inject constructor(
                 inserted = inserted,
                 skipped = skipped,
                 rejected = rejected,
+                statements = statements,
             )
         }
     }
@@ -460,6 +507,7 @@ class AppViewModel @Inject constructor(
                     from.bufferedReader().use { it.readText() }
                 }
                 val result = withContext(Dispatchers.IO) { backupRepository.importJson(json) }
+                applyRestoredSessionState()
                 _backupState.value = BackupUiState.Imported(result)
             } catch (t: Throwable) {
                 _backupState.value = BackupUiState.Error(BackupErrorKind.IMPORT)
@@ -469,6 +517,37 @@ class AppViewModel @Inject constructor(
 
     fun clearBackupState() {
         _backupState.value = BackupUiState.Idle
+    }
+
+    /**
+     * Backup writes Room only. Reload lock, hide-amounts, owner name, widget mask,
+     * and card-due alarms so the current process matches the restored file.
+     */
+    private suspend fun applyRestoredSessionState() {
+        _ownerName.value = settingsDao.get(AppSettings.OWNER_NAME)?.trim().orEmpty()
+        withContext(Dispatchers.IO) { ownerNameProvider.refresh() }
+
+        amountsHiddenResolved = true
+        _amountsHiddenReady.value = true
+        val hidden = settingsDao.get(AppSettings.AMOUNTS_HIDDEN) == "true"
+        _amountsHidden.value = hidden
+        MonthSpendWidgetProvider.applyAmountsHidden(appContext, hidden)
+
+        loadAppLockState(relock = false)
+
+        withContext(Dispatchers.IO) {
+            transactionRepository.reconcileSelfTransfers()
+            cardDueReminderScheduler.scheduleAll(cardStatementRepository.getAll())
+            val window = com.expensetracker.ui.screen.DashboardRanges.forPeriod(
+                com.expensetracker.ui.screen.SpendPeriod.MONTH,
+                clock,
+            )
+            val spend = transactionRepository.observeSpendTotal(
+                window.fromInclusive,
+                window.toExclusive,
+            ).first()
+            MonthSpendWidgetProvider.cacheAmount(appContext, spend.amount, hidden)
+        }
     }
 
     private companion object {
