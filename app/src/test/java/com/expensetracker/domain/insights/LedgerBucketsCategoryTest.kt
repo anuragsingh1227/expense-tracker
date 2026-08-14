@@ -40,7 +40,8 @@ class LedgerBucketsCategoryTest {
             byCat.entries.map { CategorySpend(it.key, it.value) },
             LedgerBuckets.spend(listOf(purchase, refund)),
         )
-        assertThat(bars.sumOfAmounts()).isEqualTo(BigDecimal.ZERO.setScale(2))
+        assertThat(bars).isEmpty()
+        assertThat(bars.sumOfAmounts().compareTo(BigDecimal.ZERO)).isEqualTo(0)
     }
 
     @Test
