@@ -88,6 +88,12 @@ object TransactionGate {
             """(?=.*\bTHANK\s+YOU\s+FOR\s+YOUR\s+PAYMENT\b)(?=.*\bCREDIT\s+CARD\b)(?=.*\bAUTO\s+DEBIT\b)""",
             RegexOption.IGNORE_CASE,
         ),
+        // Sending-bank NEFT "credited to the beneficiary" is a success receipt.
+        // The receiving account's own credit SMS is the ledger row.
+        Regex(
+            """\bcredited\s+to\s+the\s+beneficiary(?:\s+account)?\b""",
+            RegexOption.IGNORE_CASE,
+        ),
     )
 
     /**
@@ -114,6 +120,9 @@ object TransactionGate {
         // ICICI "Acc XX293 debited Rs. X on DATE Info..." — bare "debited" + amount,
         // no with/for/from/via connector.
         "DEBITED RS", "DEBITED INR", "DEBITED ₹",
+        // Axis compact amount-first: "INR 5000.00 debited\nA/c no. XX8291"
+        // (symmetric with bare CREDITED on the credit side).
+        "DEBITED",
     )
     private val STRONG_CREDIT = listOf(
         "HAS BEEN CREDITED", "BEEN CREDITED", "CREDITED WITH", "CREDITED TO", "CREDITED",

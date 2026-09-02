@@ -127,6 +127,41 @@ object SampleSms {
     const val ICICI_CARD_SPENT_USING =
         "INR 2,500.00 spent using ICICI Bank Card XX1014 on 01-Sep-26 on GOODCHOICE PREM. Avl Limit: INR 2,13,926.78. If not you, call 1800 2662/SMS BLOCK 1014 to 9215676766."
 
+    const val ICICI_CARD_SPENT_USING_FUEL =
+        "INR 4,096.00 spent using ICICI Bank Card XX1014 on 01-Sep-26 on PARAS FUELS. Avl Limit: INR 2,16,426.78. If not you, call 1800 2662/SMS BLOCK 1014 to 9215676766."
+
+    /** ICICI credit-card UPI debit using hyphenated UPI-ref-merchant. */
+    const val ICICI_CARD_UPI_HYPHEN_AIRTEL =
+        "ICICI Bank Credit Card XX7002 debited for INR 360.00 on 31-Aug-26 for UPI-002104929024-Airtel. To dispute call 18001080/SMS BLOCK 7002 to 9215676766"
+
+    /** Axis inbound NEFT — the ledger credit to keep. */
+    const val AXIS_NEFT_CREDIT_INBOUND =
+        "INR 90000.00 credited to A/c no. XX8291 on 01-09-26 at 07:32:18 IST. Info - NEFT/IN12624453192288/ANUR. Chk Bal https://ccm.axis.bank.in/AXISBK/m49XJ3KM - Axis Bank"
+
+    /**
+     * Sending-bank NEFT success receipt for the same UTR as [AXIS_NEFT_CREDIT_INBOUND].
+     * Duplicate of the inbound credit — must be ignored.
+     */
+    const val ICICI_NEFT_BENEFICIARY_CONFIRMATION =
+        "ICICI BANK NEFT Transaction with reference number IN12624453192288 for Rs. 90000.00 has been credited to the beneficiary account on 01-09-2026 at 07:32:47"
+
+    /** Axis compact card spend — amount-first "Spent INR", merchant on its own line. */
+    const val AXIS_COMPACT_CARD_SPENT_SWIGGY =
+        "Spent INR 1548\nAxis Bank Card no. XX0887\n28-08-26 18:34:34 IST\nSWIGGY FOOD\nAvl Limit: INR 194470.46\nNot you? SMS BLOCK 0887 to 919951860002"
+
+    /** Axis compact UPI P2A debit — "INR X.00 debited" then payee after the ref. */
+    const val AXIS_COMPACT_UPI_P2A_ASMITA =
+        "INR 5000.00 debited\nA/c no. XX8291\n28-08-26, 09:23:39\nUPI/P2A/824994710955/ASMITA SINGH DO SH\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank"
+
+    const val AXIS_COMPACT_UPI_P2A_SUSHMITA =
+        "INR 5000.00 debited\nA/c no. XX8291\n28-08-26, 09:23:21\nUPI/P2A/055975462294/Ms SUSHMITA SINGH\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank"
+
+    const val AXIS_COMPACT_UPI_P2A_HARDWARE =
+        "INR 250.00 debited\nA/c no. XX8291\n27-08-26, 14:22:40\nUPI/P2A/167897412396/M S ANEJA HARDWARE\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank"
+
+    const val AXIS_COMPACT_UPI_P2M_ROSHAN =
+        "INR 210.00 debited\nA/c no. XX8291\n23-08-26, 17:27:10\nUPI/P2M/148918812356/ROSHAN KUMAR PRASAD\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank"
+
     /** UPI debit with merchant name after the UPI reference number. */
     const val UPI_WITH_NAMED_MERCHANT =
         "Rs 450.00 debited from A/c XX1234 on 07-Aug-26 for UPI/412839-SWIGGY. Avl Bal Rs 8,200.00"

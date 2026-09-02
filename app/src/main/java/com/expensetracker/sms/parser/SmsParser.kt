@@ -105,11 +105,11 @@ class SmsParser(
         val upper = body.uppercase()
         return when {
             upper.contains("FASTAG") -> PaymentMode.FASTAG
-            upper.contains("UPI") || UPI_ID.containsMatchIn(body) -> PaymentMode.UPI
             upper.contains("CREDIT CARD") || upper.contains("CC ") -> PaymentMode.CARD_CREDIT
             upper.contains("DEBIT CARD") || upper.contains("DC ") -> PaymentMode.CARD_DEBIT
             // ICICI often omits Credit/Debit: "spent using ICICI Bank Card XX1014 … Avl Limit"
             upper.contains("BANK CARD") -> PaymentMode.CARD_CREDIT
+            upper.contains("UPI") || UPI_ID.containsMatchIn(body) -> PaymentMode.UPI
             upper.contains("NEFT") || upper.contains("IMPS") || upper.contains("RTGS") -> PaymentMode.NET_BANKING
             upper.contains("WALLET") -> PaymentMode.WALLET
             upper.contains("ATM") -> PaymentMode.CARD_DEBIT
@@ -137,6 +137,17 @@ class SmsParser(
             val name = match.groupValues[1].trim().trimEnd('.', ',')
             if (name.length >= 2 && isPlausibleMerchant(name)) return name
         }
+        // Axis compact: "UPI/P2A/824994710955/ASMITA SINGH DO SH"
+        UPI_P2_PAYEE.find(body)?.let { match ->
+            val name = sanitizeMerchantCandidate(match.groupValues[1]) ?: return@let
+            if (isPlausibleMerchant(name)) return name
+        }
+        // ICICI card UPI: "for UPI-002104929024-Airtel"
+        UPI_HYPHEN_PAYEE.find(body)?.let { match ->
+            val name = sanitizeMerchantCandidate(match.groupValues[1]) ?: return@let
+            if (isPlausibleMerchant(name)) return name
+        }
+        extractCompactPayeeLine(body)?.let { return it }
         return null
     }
 
@@ -174,6 +185,23 @@ class SmsParser(
     private fun looksLikeDateToken(name: String): Boolean = DATE_LIKE_MERCHANT.containsMatchIn(name.trim())
 
     /**
+     * Axis compact card-spend puts the merchant on its own line:
+     * `Spent INR 1548` / card / `28-08-26 18:34:34 IST` / `SWIGGY FOOD` / Avl Limit.
+     */
+    private fun extractCompactPayeeLine(body: String): String? {
+        for (line in body.lineSequence()) {
+            val trimmed = line.trim()
+            if (trimmed.length < 3) continue
+            val upper = trimmed.uppercase()
+            if (COMPACT_PAYEE_SKIP.containsMatchIn(upper)) continue
+            if (looksLikeDateToken(trimmed) || DATE_TIME_LINE.containsMatchIn(trimmed)) continue
+            val name = sanitizeMerchantCandidate(trimmed) ?: continue
+            if (isPlausibleMerchant(name)) return name
+        }
+        return null
+    }
+
+    /**
      * Resolves category for rows the merchant dictionary/label rules didn't claim,
      * but first forces Transfer/Refund so those ledger-correctness rules cannot be
      * bypassed by a merchant match (e.g. a refund from a known merchant).
@@ -207,6 +235,8 @@ class SmsParser(
             upper.contains("MUTUAL FUND") || upper.contains("SIP") || upper.contains("ZERODHA") ||
                 upper.contains("GROWW") -> Categories.INVESTMENT
             upper.contains("RECHARGE") -> Categories.RECHARGE
+            upper.contains("FUEL") || upper.contains("PETROL") || upper.contains("DIESEL") ->
+                Categories.FUEL
             upper.contains("ELECTRICITY") || upper.contains("WATER BILL") || upper.contains("GAS BILL") ->
                 Categories.UTILITIES
             // One-sided NEFT/IMPS/RTGS account move with no known merchant —
@@ -318,6 +348,18 @@ class SmsParser(
         // "for UPI/123456-SWIGGY" or "for UPI/SWIGGY" — capture the name part.
         private val UPI_MERCHANT =
             Regex("""(?i)\bfor\s+UPI/[A-Z0-9]*[-/]?([A-Z][A-Z0-9 .&'*]{1,38}?)(?=\s+(?:via|on|through|ref|avl|bal|info)|\s*[.,;]|$)""")
+        // Axis: "UPI/P2A/824994710955/ASMITA SINGH DO SH" or "UPI/P2M/148918812356/ROSHAN KUMAR PRASAD"
+        private val UPI_P2_PAYEE =
+            Regex("""(?i)\bUPI/P2[AM]/[A-Z0-9]{6,}/([^\n]+)""")
+        // ICICI: "for UPI-002104929024-Airtel"
+        private val UPI_HYPHEN_PAYEE =
+            Regex("""(?i)\bUPI-\d{6,}-([A-Za-z][A-Za-z0-9 .&'*]{1,40}?)(?=\s|[.,;]|$)""")
+        private val COMPACT_PAYEE_SKIP =
+            Regex(
+                """(?i)(?:debited|credited|spent|\bavl\b|not you|sms\s+block|a/c|acct|\baccount\b|\bcard\b|\bbank\b|upi/|\binr\b|\brs\.?\b|₹)""",
+            )
+        private val DATE_TIME_LINE =
+            Regex("""^\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4}""")
         // Stop before common trailing clauses (via/on/UPI/ref/dispute).
         private val MERCHANT_AT =
             Regex("""(?i)\bat\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|for|through|upi|ref|avl|bal|info|if\s+not|to\s+dispute)|\s*[.,;]|$)""")
@@ -341,8 +383,14 @@ class SmsParser(
         private val REFERENCE_PATTERNS = listOf(
             Regex("""(?i)(?:ref(?:erence)?(?:\s*no)?\.?|txn(?:\s*id)?\.?|utr)[:\s#]*([A-Z0-9]{6,})"""),
             Regex("""(?i)UPI(?:\s*ref)?[:\s]*([0-9]{9,})"""),
+            // Axis compact UPI: "UPI/P2A/824994710955/ASMITA SINGH"
+            Regex("""(?i)UPI/P2[AM]/([0-9]{9,})"""),
+            // ICICI card UPI: "UPI-002104929024-Airtel"
+            Regex("""(?i)UPI-([0-9]{9,})"""),
             // Axis NEFT/IMPS compact template: "NEFT/MB/AXOMB16602145999/V"
             Regex("""(?i)(?:NEFT|IMPS|RTGS)/[A-Z]{1,3}/([A-Z0-9]{8,})"""),
+            // Axis "Info - NEFT/IN12624453192288/ANUR" (no 1–3 letter bank-code slot)
+            Regex("""(?i)(?:NEFT|IMPS|RTGS)/([A-Z0-9]{8,})"""),
             // Axis card-payment compact template: "CRD-PMNT-530562****0887"
             Regex("""(?i)CRD[- ]?PMNT[- ]?([A-Z0-9*]{6,})"""),
         )

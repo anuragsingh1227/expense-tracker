@@ -234,6 +234,94 @@ class SmsParserTest {
     }
 
     @Test
+    fun `Axis inbound NEFT credit is kept as Transfer not income`() {
+        val tx = parser.parse(raw("VM-AXISBK", SampleSms.AXIS_NEFT_CREDIT_INBOUND))!!
+        assertThat(tx.type).isEqualTo(TransactionType.CREDIT)
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("90000.00"))
+        assertThat(tx.accountLast4).isEqualTo("8291")
+        assertThat(tx.referenceNumber).isEqualTo("IN12624453192288")
+        assertThat(tx.category).isEqualTo(Categories.TRANSFER)
+        assertThat(LedgerBuckets.isIncome(tx)).isFalse()
+        assertThat(LedgerBuckets.isSpend(tx)).isFalse()
+        assertThat(LocalDate.ofInstant(tx.timestamp, ZoneId.systemDefault()))
+            .isEqualTo(LocalDate.of(2026, 9, 1))
+    }
+
+    @Test
+    fun `ICICI NEFT beneficiary confirmation is ignored as duplicate of inbound credit`() {
+        assertThat(parser.isTransactional(SampleSms.ICICI_NEFT_BENEFICIARY_CONFIRMATION)).isFalse()
+        assertThat(parser.parse(raw("AD-ICICIT-S", SampleSms.ICICI_NEFT_BENEFICIARY_CONFIRMATION))).isNull()
+    }
+
+    @Test
+    fun `Axis compact Spent INR card alert is spend not ignored`() {
+        val tx = parser.parse(raw("VM-AXISBK", SampleSms.AXIS_COMPACT_CARD_SPENT_SWIGGY))!!
+        assertThat(tx.type).isEqualTo(TransactionType.DEBIT)
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("1548.00"))
+        assertThat(tx.merchant).isEqualTo("Swiggy")
+        assertThat(tx.category).isEqualTo(Categories.FOOD)
+        assertThat(tx.cardLast4).isEqualTo("0887")
+        assertThat(tx.paymentMode).isEqualTo(PaymentMode.CARD_CREDIT)
+        assertThat(LedgerBuckets.isSpend(tx)).isTrue()
+        assertThat(LocalDate.ofInstant(tx.timestamp, ZoneId.systemDefault()))
+            .isEqualTo(LocalDate.of(2026, 8, 28))
+    }
+
+    @Test
+    fun `Axis compact INR debited UPI P2A is spend not ignored`() {
+        val tx = parser.parse(raw("VM-AXISBK", SampleSms.AXIS_COMPACT_UPI_P2A_ASMITA))!!
+        assertThat(tx.type).isEqualTo(TransactionType.DEBIT)
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("5000.00"))
+        assertThat(tx.merchant?.uppercase()).contains("ASMITA")
+        assertThat(tx.accountLast4).isEqualTo("8291")
+        assertThat(tx.referenceNumber).isEqualTo("824994710955")
+        assertThat(tx.paymentMode).isEqualTo(PaymentMode.UPI)
+        assertThat(tx.category).isNotEqualTo(Categories.TRANSFER)
+        assertThat(LedgerBuckets.isSpend(tx)).isTrue()
+    }
+
+    @Test
+    fun `Axis compact UPI P2A Sushmita and hardware and P2M are spend`() {
+        val sushmita = parser.parse(raw("VM-AXISBK", SampleSms.AXIS_COMPACT_UPI_P2A_SUSHMITA))!!
+        assertThat(sushmita.amount.amount).isEqualTo(BigDecimal("5000.00"))
+        assertThat(sushmita.merchant?.uppercase()).contains("SUSHMITA")
+        assertThat(LedgerBuckets.isSpend(sushmita)).isTrue()
+
+        val hardware = parser.parse(raw("VM-AXISBK", SampleSms.AXIS_COMPACT_UPI_P2A_HARDWARE))!!
+        assertThat(hardware.amount.amount).isEqualTo(BigDecimal("250.00"))
+        assertThat(hardware.merchant?.uppercase()).contains("ANEJA")
+        assertThat(LedgerBuckets.isSpend(hardware)).isTrue()
+
+        val p2m = parser.parse(raw("VM-AXISBK", SampleSms.AXIS_COMPACT_UPI_P2M_ROSHAN))!!
+        assertThat(p2m.amount.amount).isEqualTo(BigDecimal("210.00"))
+        assertThat(p2m.merchant?.uppercase()).contains("ROSHAN")
+        assertThat(p2m.referenceNumber).isEqualTo("148918812356")
+        assertThat(LedgerBuckets.isSpend(p2m)).isTrue()
+    }
+
+    @Test
+    fun `ICICI spent-using PARAS FUELS is fuel spend`() {
+        val tx = parser.parse(raw("AD-ICICIT-S", SampleSms.ICICI_CARD_SPENT_USING_FUEL))!!
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("4096.00"))
+        assertThat(tx.merchant?.uppercase()).contains("PARAS")
+        assertThat(tx.category).isEqualTo(Categories.FUEL)
+        assertThat(LedgerBuckets.isSpend(tx)).isTrue()
+    }
+
+    @Test
+    fun `ICICI credit-card UPI hyphen Airtel is recharge spend`() {
+        val tx = parser.parse(raw("AD-ICICIT-S", SampleSms.ICICI_CARD_UPI_HYPHEN_AIRTEL))!!
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("360.00"))
+        assertThat(tx.type).isEqualTo(TransactionType.DEBIT)
+        assertThat(tx.merchant).isEqualTo("Airtel")
+        assertThat(tx.category).isEqualTo(Categories.RECHARGE)
+        assertThat(tx.cardLast4).isEqualTo("7002")
+        assertThat(tx.paymentMode).isEqualTo(PaymentMode.CARD_CREDIT)
+        assertThat(tx.referenceNumber).isEqualTo("002104929024")
+        assertThat(LedgerBuckets.isSpend(tx)).isTrue()
+    }
+
+    @Test
     fun `UPI debit with named merchant after reference extracts merchant`() {
         val tx = parser.parse(raw("VM-HDFCBK", SampleSms.UPI_WITH_NAMED_MERCHANT))!!
         assertThat(tx.merchant?.uppercase()).contains("SWIGGY")
