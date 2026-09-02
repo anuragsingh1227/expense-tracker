@@ -120,6 +120,13 @@ object SampleSms {
     const val ICICI_CARD_HAS_BEEN_USED =
         "Dear Customer, your ICICI Bank Credit Card XX1014 has been used for a transaction of Rs 1,122.00 on 01-Aug-26 at ZOMATO. Avl limit: Rs 48,701.00"
 
+    /**
+     * ICICI "INR X spent using Bank Card … on DATE on MERCHANT. Avl Limit" —
+     * no "debited" / "spent on" / "credit card" wording. Must parse as spend.
+     */
+    const val ICICI_CARD_SPENT_USING =
+        "INR 2,500.00 spent using ICICI Bank Card XX1014 on 01-Sep-26 on GOODCHOICE PREM. Avl Limit: INR 2,13,926.78. If not you, call 1800 2662/SMS BLOCK 1014 to 9215676766."
+
     /** UPI debit with merchant name after the UPI reference number. */
     const val UPI_WITH_NAMED_MERCHANT =
         "Rs 450.00 debited from A/c XX1234 on 07-Aug-26 for UPI/412839-SWIGGY. Avl Bal Rs 8,200.00"

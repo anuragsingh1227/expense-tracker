@@ -108,6 +108,8 @@ class SmsParser(
             upper.contains("UPI") || UPI_ID.containsMatchIn(body) -> PaymentMode.UPI
             upper.contains("CREDIT CARD") || upper.contains("CC ") -> PaymentMode.CARD_CREDIT
             upper.contains("DEBIT CARD") || upper.contains("DC ") -> PaymentMode.CARD_DEBIT
+            // ICICI often omits Credit/Debit: "spent using ICICI Bank Card XX1014 … Avl Limit"
+            upper.contains("BANK CARD") -> PaymentMode.CARD_CREDIT
             upper.contains("NEFT") || upper.contains("IMPS") || upper.contains("RTGS") -> PaymentMode.NET_BANKING
             upper.contains("WALLET") -> PaymentMode.WALLET
             upper.contains("ATM") -> PaymentMode.CARD_DEBIT
@@ -122,6 +124,12 @@ class SmsParser(
         }
         MERCHANT_TO.find(body)?.let { match ->
             val name = sanitizeMerchantCandidate(match.groupValues[1]) ?: return@let
+            if (isPlausibleMerchant(name)) return name
+        }
+        // "on 01-Sep-26 on GOODCHOICE PREM" — skip the date, keep the merchant.
+        MERCHANT_ON.findAll(body).forEach { match ->
+            val name = sanitizeMerchantCandidate(match.groupValues[1]) ?: return@forEach
+            if (looksLikeDateToken(name)) return@forEach
             if (isPlausibleMerchant(name)) return name
         }
         // "for UPI/123456-SWIGGY" or "for UPI/SWIGGY" — the name after the slash/dash.
@@ -155,10 +163,15 @@ class SmsParser(
         if (upper.startsWith("DISPUTE")) return false
         if (upper.startsWith("SMS")) return false
         if (upper.startsWith("RS") || upper.startsWith("INR") || name.startsWith("₹")) return false
+        if (upper.startsWith("IF NOT")) return false
+        if (looksLikeDateToken(name)) return false
         if (DISPUTE_OR_HELPLINE.containsMatchIn(name)) return false
         if (PHONE_HEAVY_MERCHANT.containsMatchIn(name)) return false
         return true
     }
+
+    /** "01-Sep-26" / "12-01-24" / "15-APR" captured by `\bon` before the real merchant. */
+    private fun looksLikeDateToken(name: String): Boolean = DATE_LIKE_MERCHANT.containsMatchIn(name.trim())
 
     /**
      * Resolves category for rows the merchant dictionary/label rules didn't claim,
@@ -307,9 +320,14 @@ class SmsParser(
             Regex("""(?i)\bfor\s+UPI/[A-Z0-9]*[-/]?([A-Z][A-Z0-9 .&'*]{1,38}?)(?=\s+(?:via|on|through|ref|avl|bal|info)|\s*[.,;]|$)""")
         // Stop before common trailing clauses (via/on/UPI/ref/dispute).
         private val MERCHANT_AT =
-            Regex("""(?i)\bat\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|through|upi|ref|avl|bal|info|to\s+dispute)|\s*[.,;]|$)""")
+            Regex("""(?i)\bat\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|through|upi|ref|avl|bal|info|if\s+not|to\s+dispute)|\s*[.,;]|$)""")
         private val MERCHANT_TO =
-            Regex("""(?i)\bto\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|through|upi|ref|avl|bal|info|to\s+dispute)|\s*[.,;]|$)""")
+            Regex("""(?i)\bto\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|through|upi|ref|avl|bal|info|if\s+not|to\s+dispute)|\s*[.,;]|$)""")
+        // ICICI: "spent using … Card XX1014 on 01-Sep-26 on GOODCHOICE PREM. Avl Limit"
+        private val MERCHANT_ON =
+            Regex("""(?i)\bon\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|through|upi|ref|avl|bal|info|if\s+not|to\s+dispute)|\s*[.,;]|$)""")
+        private val DATE_LIKE_MERCHANT =
+            Regex("""(?i)^\d{1,2}[./\-]\s*(?:\d{1,2}|[A-Za-z]{3,9})(?:[./\-]\s*\d{2,4})?$""")
         private val DISPUTE_OR_HELPLINE =
             Regex("""(?i)\b(?:dispute|helpline|customer\s+care|toll\s*free)\b""")
         private val PHONE_HEAVY_MERCHANT =

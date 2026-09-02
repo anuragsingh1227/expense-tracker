@@ -7,6 +7,8 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import java.math.BigDecimal
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 
 class SmsParserTest {
 
@@ -210,6 +212,25 @@ class SmsParserTest {
         assertThat(tx.type).isEqualTo(TransactionType.DEBIT)
         assertThat(tx.amount.amount).isEqualTo(BigDecimal("1122.00"))
         assertThat(tx.merchant?.uppercase()).contains("ZOMATO")
+    }
+
+    @Test
+    fun `ICICI INR spent-using Bank Card is a payment not rejected`() {
+        assertThat(parser.isTransactional(SampleSms.ICICI_CARD_SPENT_USING)).isTrue()
+        val tx = parser.parse(raw("AD-ICICIT-S", SampleSms.ICICI_CARD_SPENT_USING))!!
+        assertThat(tx.type).isEqualTo(TransactionType.DEBIT)
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("2500.00"))
+        assertThat(tx.merchant?.uppercase()).contains("GOODCHOICE")
+        assertThat(tx.merchant?.uppercase()).doesNotContain("SEP")
+        assertThat(tx.merchant).doesNotContain("9215676766")
+        assertThat(tx.merchant).doesNotContain("1800")
+        assertThat(tx.cardLast4).isEqualTo("1014")
+        assertThat(tx.paymentMode).isEqualTo(PaymentMode.CARD_CREDIT)
+        assertThat(tx.bank).isEqualTo("ICICI")
+        assertThat(tx.category).isNotEqualTo(Categories.TRANSFER)
+        assertThat(LedgerBuckets.isSpend(tx)).isTrue()
+        assertThat(LocalDate.ofInstant(tx.timestamp, ZoneId.systemDefault()))
+            .isEqualTo(LocalDate.of(2026, 9, 1))
     }
 
     @Test
