@@ -60,4 +60,4 @@ Release signing: copy `keystore.properties.example` → `keystore.properties` an
 - Home-screen month-spend widget
 - Spam cleanup; refunds net against spend; Transfer pairing
 
-Current version: see `versionName` / `versionCode` in `app/build.gradle.kts` (1.2.2 / 112 at last release).
+Current version: see `versionName` / `versionCode` in `app/build.gradle.kts` (1.2.3 / 113 at last release).
