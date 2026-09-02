@@ -320,14 +320,15 @@ class SmsParser(
             Regex("""(?i)\bfor\s+UPI/[A-Z0-9]*[-/]?([A-Z][A-Z0-9 .&'*]{1,38}?)(?=\s+(?:via|on|through|ref|avl|bal|info)|\s*[.,;]|$)""")
         // Stop before common trailing clauses (via/on/UPI/ref/dispute).
         private val MERCHANT_AT =
-            Regex("""(?i)\bat\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|through|upi|ref|avl|bal|info|if\s+not|to\s+dispute)|\s*[.,;]|$)""")
+            Regex("""(?i)\bat\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|for|through|upi|ref|avl|bal|info|if\s+not|to\s+dispute)|\s*[.,;]|$)""")
         private val MERCHANT_TO =
-            Regex("""(?i)\bto\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|through|upi|ref|avl|bal|info|if\s+not|to\s+dispute)|\s*[.,;]|$)""")
+            Regex("""(?i)\bto\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|for|through|upi|ref|avl|bal|info|if\s+not|to\s+dispute)|\s*[.,;]|$)""")
         // ICICI: "spent using … Card XX1014 on 01-Sep-26 on GOODCHOICE PREM. Avl Limit"
+        // Stop at `for` so "on 05-Aug-26 for UPI/…" does not become a merchant.
         private val MERCHANT_ON =
-            Regex("""(?i)\bon\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|through|upi|ref|avl|bal|info|if\s+not|to\s+dispute)|\s*[.,;]|$)""")
+            Regex("""(?i)\bon\s+([A-Z0-9][A-Z0-9 .&'*/-]{2,40}?)(?=\s+(?:via|on|for|through|upi|ref|avl|bal|info|if\s+not|to\s+dispute)|\s*[.,;]|$)""")
         private val DATE_LIKE_MERCHANT =
-            Regex("""(?i)^\d{1,2}[./\-]\s*(?:\d{1,2}|[A-Za-z]{3,9})(?:[./\-]\s*\d{2,4})?$""")
+            Regex("""(?i)^\d{1,2}[./\-]\s*(?:\d{1,2}|[A-Za-z]{3,9})(?:[./\-]\s*\d{2,4})?\b""")
         private val DISPUTE_OR_HELPLINE =
             Regex("""(?i)\b(?:dispute|helpline|customer\s+care|toll\s*free)\b""")
         private val PHONE_HEAVY_MERCHANT =
