@@ -227,6 +227,14 @@ private fun BudgetProgressRow(
             style = MaterialTheme.typography.bodySmall,
             color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (over) {
+            val extra = Money(row.spent.amount.subtract(limit.amount).setScale(2, RoundingMode.HALF_UP))
+            Text(
+                stringResource(R.string.budget_over, extra.maskableFormatInr()),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
         Spacer(Modifier.height(6.dp))
         LinearProgressIndicator(
             progress = { progress },

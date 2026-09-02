@@ -26,6 +26,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,6 +48,7 @@ import com.expensetracker.ui.BackupErrorKind
 import com.expensetracker.ui.BackupUiState
 import com.expensetracker.ui.RequiredPermissions
 import com.expensetracker.ui.components.ScreenHeader
+import com.expensetracker.ui.components.SectionLabel
 import com.expensetracker.ui.components.StatusPill
 import com.expensetracker.ui.components.SurfaceCard
 import kotlinx.coroutines.launch
@@ -72,6 +74,8 @@ fun SettingsScreen(
     onChangeAppLockPin: (String, String, (Boolean) -> Unit) -> Unit = { _, _, onResult -> onResult(false) },
     onDisableAppLock: (String, (Boolean) -> Unit) -> Unit = { _, onResult -> onResult(false) },
     onSetAppLockBiometricEnabled: (Boolean) -> Unit = {},
+    amountsHidden: Boolean = false,
+    onToggleAmountsHidden: () -> Unit = {},
     onPermissionsChanged: () -> Unit = {},
     onExportCsv: (java.io.OutputStream) -> Unit = {},
     csvExportState: BackupUiState = BackupUiState.Idle,
@@ -158,55 +162,14 @@ fun SettingsScreen(
             subtitle = stringResource(R.string.settings_subtitle),
         )
 
-        AppLockSettingsCard(
-            enabled = appLockEnabled,
-            biometricAvailable = appLockBiometricAvailable,
-            biometricEnabled = appLockBiometricEnabled,
-            onEnableWithPin = onEnableAppLock,
-            onChangePin = onChangeAppLockPin,
-            onDisable = onDisableAppLock,
-            onSetBiometricEnabled = onSetAppLockBiometricEnabled,
-        )
-
-        SurfaceCard {
-            Text(stringResource(R.string.settings_owner_name_title), style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(6.dp))
-            Text(
-                stringResource(R.string.settings_owner_name_body),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                value = nameInput,
-                onValueChange = { nameInput = it },
-                singleLine = true,
-                label = { Text(stringResource(R.string.settings_owner_name_hint)) },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-            )
-            Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = {
-                    onOwnerNameChange(nameInput)
-                    scope.launch { snackbarHostState.showSnackbar(nameSavedMessage) }
-                },
-                enabled = nameInput.isNotBlank() && nameInput.trim() != ownerName,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 52.dp),
-                shape = RoundedCornerShape(14.dp),
-            ) { Text(stringResource(R.string.action_save)) }
-        }
-
-        BudgetsSettingsCard()
-        LabelRulesSettingsCard()
-
+        SectionLabel(stringResource(R.string.settings_section_import))
         SurfaceCard {
             Text(stringResource(R.string.settings_paste_title), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(6.dp))
             Text(
-                stringResource(R.string.settings_paste_body),
+                stringResource(
+                    if (autoSms) R.string.settings_paste_body_sms else R.string.settings_paste_body,
+                ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -311,6 +274,79 @@ fun SettingsScreen(
             }
         }
 
+        SectionLabel(stringResource(R.string.settings_section_money))
+        BudgetsSettingsCard()
+        CardBillingSettingsCard()
+        LabelRulesSettingsCard()
+
+        SectionLabel(stringResource(R.string.settings_section_security))
+        AppLockSettingsCard(
+            enabled = appLockEnabled,
+            biometricAvailable = appLockBiometricAvailable,
+            biometricEnabled = appLockBiometricEnabled,
+            onEnableWithPin = onEnableAppLock,
+            onChangePin = onChangeAppLockPin,
+            onDisable = onDisableAppLock,
+            onSetBiometricEnabled = onSetAppLockBiometricEnabled,
+        )
+
+        SurfaceCard {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text(
+                        stringResource(R.string.settings_hide_amounts_title),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        stringResource(R.string.settings_hide_amounts_body),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = amountsHidden,
+                    onCheckedChange = { onToggleAmountsHidden() },
+                )
+            }
+        }
+
+        SurfaceCard {
+            Text(stringResource(R.string.settings_owner_name_title), style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                stringResource(R.string.settings_owner_name_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = nameInput,
+                onValueChange = { nameInput = it },
+                singleLine = true,
+                label = { Text(stringResource(R.string.settings_owner_name_hint)) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+            )
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = {
+                    onOwnerNameChange(nameInput)
+                    scope.launch { snackbarHostState.showSnackbar(nameSavedMessage) }
+                },
+                enabled = nameInput.isNotBlank() && nameInput.trim() != ownerName,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp),
+                shape = RoundedCornerShape(14.dp),
+            ) { Text(stringResource(R.string.action_save)) }
+        }
+
+        SectionLabel(stringResource(R.string.settings_section_data))
         SurfaceCard {
             Text(stringResource(R.string.settings_cleanup_title), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(6.dp))
@@ -393,6 +429,8 @@ fun SettingsScreen(
                             state.result.transactionsSkipped,
                             state.result.merchantsRestored,
                             state.result.labelRulesRestored,
+                            state.result.cardStatementsRestored,
+                            state.result.budgetsRestored,
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.secondary,
@@ -414,6 +452,16 @@ fun SettingsScreen(
                 }
                 BackupUiState.Idle -> Unit
             }
+        }
+
+        SurfaceCard {
+            Text(stringResource(R.string.settings_csv_title), style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                stringResource(R.string.settings_csv_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
                 onClick = {

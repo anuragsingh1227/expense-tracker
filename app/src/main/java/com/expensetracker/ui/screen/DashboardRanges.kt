@@ -20,6 +20,10 @@ enum class SpendPeriod {
     MONTH,
     LAST_MONTH,
     LAST_3_MONTHS,
+    /** Indian financial year: 1 Apr – 31 Mar. */
+    FINANCIAL_YEAR,
+    /** Custom credit-card billing cycle (see [billingCycleStartDay]). */
+    BILLING_CYCLE,
 }
 
 data class PeriodWindow(
@@ -62,7 +66,12 @@ object DashboardRanges {
         return DashboardWindow(startOfDay, startOfMonth, endExclusive, today)
     }
 
-    fun forPeriod(period: SpendPeriod, clock: Clock, zone: ZoneId = clock.zone): PeriodWindow {
+    fun forPeriod(
+        period: SpendPeriod,
+        clock: Clock,
+        zone: ZoneId = clock.zone,
+        billingCycleStartDay: Int = 1,
+    ): PeriodWindow {
         val today = LocalDate.now(clock.withZone(zone))
         val (startDate, endExclusiveDate) = when (period) {
             SpendPeriod.DAY -> today to today.plusDays(1)
@@ -79,6 +88,8 @@ object DashboardRanges {
                 val startYm = YearMonth.from(today).minusMonths(2)
                 startYm.atDay(1) to today.plusDays(1)
             }
+            SpendPeriod.FINANCIAL_YEAR -> indianFinancialYear(today)
+            SpendPeriod.BILLING_CYCLE -> billingCycle(today, billingCycleStartDay)
         }
         val fromInclusive = startDate.atStartOfDay(zone).toInstant()
         val toExclusive = endExclusiveDate.atStartOfDay(zone).toInstant()
@@ -124,7 +135,9 @@ object DashboardRanges {
 
     fun formatRange(period: SpendPeriod, start: LocalDate, end: LocalDate): String = when (period) {
         SpendPeriod.DAY -> end.format(RANGE_YEAR_FMT)
-        SpendPeriod.WEEK, SpendPeriod.MONTH, SpendPeriod.LAST_3_MONTHS -> {
+        SpendPeriod.WEEK, SpendPeriod.MONTH, SpendPeriod.LAST_3_MONTHS,
+        SpendPeriod.FINANCIAL_YEAR, SpendPeriod.BILLING_CYCLE,
+        -> {
             if (start.year == end.year) {
                 "${start.format(RANGE_FMT)} – ${end.format(RANGE_FMT)} ${end.year}"
             } else {
@@ -135,6 +148,40 @@ object DashboardRanges {
             val ym = YearMonth.from(start)
             ym.format(MONTH_FMT)
         }
+    }
+
+    /**
+     * Indian FY: 1 April of the FY-start year through 31 March of the next year.
+     * If [today] is on/after 1 Apr, the current FY started this calendar year.
+     */
+    fun indianFinancialYear(today: LocalDate): Pair<LocalDate, LocalDate> {
+        val startYear = if (today.monthValue >= 4) today.year else today.year - 1
+        val start = LocalDate.of(startYear, 4, 1)
+        return start to start.plusYears(1)
+    }
+
+    /**
+     * Custom card billing cycle: [startDay] of the month through the day before
+     * [startDay] next month (e.g. 15 → 15th–14th). Clamped to 1–28 so February
+     * is always valid. The window containing [today] is returned, through tomorrow
+     * when the cycle is still open.
+     */
+    fun billingCycle(today: LocalDate, startDay: Int): Pair<LocalDate, LocalDate> {
+        val day = startDay.coerceIn(1, 28)
+        val startThisMonth = clampedDay(today.withDayOfMonth(1), day)
+        val cycleStart = if (!today.isBefore(startThisMonth)) {
+            startThisMonth
+        } else {
+            clampedDay(today.minusMonths(1).withDayOfMonth(1), day)
+        }
+        val cycleEndExclusive = clampedDay(cycleStart.plusMonths(1).withDayOfMonth(1), day)
+        val toExclusive = minOf(cycleEndExclusive, today.plusDays(1))
+        return cycleStart to toExclusive
+    }
+
+    private fun clampedDay(monthStart: LocalDate, day: Int): LocalDate {
+        val last = monthStart.lengthOfMonth()
+        return monthStart.withDayOfMonth(day.coerceAtMost(last))
     }
 
     fun millisUntilNextDay(clock: Clock, zone: ZoneId = clock.zone): Long {

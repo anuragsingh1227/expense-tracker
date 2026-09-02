@@ -47,9 +47,12 @@ Release signing: copy `keystore.properties.example` → `keystore.properties` an
 
 ## Features
 
-- Spends dashboard (Day/Week/Month/Last/3 mo), MoM rising categories, stacked month bars, investments bucket
+- Spends dashboard (Day/Week/Month/Last/3 mo/Indian FY/card billing cycle), MoM rising categories, stacked month bars, investments bucket
 - Activity search, category/bank filters, multi-select copy SMS or bulk delete, manual add (+)
-- Transaction edit (amount, merchant, date, type, category, notes) + label rules (create, manage, apply to past)
+- Transaction edit (amount, merchant, date, type, category, notes, `#tags`, split spend)
+- Offline Splitwise-style P2P ledger with Debts / Owed to Me on Activity
+- Credit-card statement SMS → local due reminders (3 days before + due date)
+- Custom credit-card billing cycles in More
 - Monthly category budgets with progress
 - Owner-name onboarding for self-transfer detection (no hardcoded names)
 - App lock (PIN + optional biometric, lockout after failed attempts) and hide-amounts (app-wide)
@@ -57,4 +60,4 @@ Release signing: copy `keystore.properties.example` → `keystore.properties` an
 - Home-screen month-spend widget
 - Spam cleanup; refunds net against spend; Transfer pairing
 
-Current version: see `versionName` / `versionCode` in `app/build.gradle.kts` (1.1.8 / 108 at last release).
+Current version: see `versionName` / `versionCode` in `app/build.gradle.kts` (1.2.2 / 112 at last release).

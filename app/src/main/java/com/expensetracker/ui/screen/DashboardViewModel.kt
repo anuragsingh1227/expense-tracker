@@ -2,6 +2,9 @@ package com.expensetracker.ui.screen
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.expensetracker.data.AppSettings
+import com.expensetracker.data.db.dao.SettingsDao
+import com.expensetracker.data.repository.CardStatementRepository
 import com.expensetracker.data.repository.CategorySpend
 import com.expensetracker.data.repository.TransactionRepository
 import com.expensetracker.domain.insights.CategoryMomChange
@@ -9,6 +12,7 @@ import com.expensetracker.domain.insights.CategoryMonthSpend
 import com.expensetracker.domain.insights.SpendInsights
 import com.expensetracker.domain.insights.SpendMath
 import com.expensetracker.domain.insights.StackMonthColumn
+import com.expensetracker.domain.model.CardStatement
 import com.expensetracker.domain.model.Money
 import com.expensetracker.domain.model.Transaction
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,6 +25,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.time.Clock
 import java.time.LocalDate
@@ -39,6 +44,8 @@ data class DashboardState(
     val momPreviousLabel: String = "",
     val momPartial: Boolean = false,
     val stack: List<StackMonthColumn> = emptyList(),
+    val upcomingDues: List<CardStatement> = emptyList(),
+    val billingCycleStartDay: Int = 1,
 ) {
     /** Income − spend − investments (transfers ignored). */
     val net: Money get() = SpendMath.netCashFlow(income, spend, investments)
@@ -61,17 +68,22 @@ private data class PeriodInsights(
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val repository: TransactionRepository,
+    private val statements: CardStatementRepository,
+    private val settingsDao: SettingsDao,
     private val clock: Clock,
 ) : ViewModel() {
 
     private val periodFlow = MutableStateFlow(SpendPeriod.MONTH)
+    private val billingDayFlow = settingsDao.observe(AppSettings.CC_BILLING_CYCLE_START_DAY)
+        .map { it?.toIntOrNull()?.coerceIn(1, 28) ?: 1 }
 
     val state: StateFlow<DashboardState> = combine(
         periodFlow,
+        billingDayFlow,
         dateBoundaryFlow(clock),
-    ) { period, _ -> period }
-        .flatMapLatest { period ->
-            val window = DashboardRanges.forPeriod(period, clock)
+    ) { period, billingDay, _ -> period to billingDay }
+        .flatMapLatest { (period, billingDay) ->
+            val window = DashboardRanges.forPeriod(period, clock, billingCycleStartDay = billingDay)
             val compare = DashboardRanges.monthCompareWindows(clock)
             val stackWindow = DashboardRanges.lastThreeMonthsWindow(clock)
             val monthKeys = DashboardRanges.monthKeysForLastThree(clock)
@@ -109,7 +121,8 @@ class DashboardViewModel @Inject constructor(
                 )
             }
 
-            combine(core, insights) { c, i ->
+            combine(core, insights, statements.observeAll()) { c, i, dues ->
+                val today = LocalDate.now(clock)
                 DashboardState(
                     period = period,
                     rangeLabel = window.labelRange,
@@ -123,6 +136,8 @@ class DashboardViewModel @Inject constructor(
                     momPreviousLabel = compare.previousLabel,
                     momPartial = compare.currentIsPartial,
                     stack = i.stack,
+                    upcomingDues = dues.filter { !it.dueDate.isBefore(today) }.take(3),
+                    billingCycleStartDay = billingDay,
                 )
             }
         }

@@ -396,4 +396,118 @@ class SmsParserTest {
         val tx = parser.parse(raw("VM-HDFCBK", body))!!
         assertThat(tx.amount.amount).isEqualTo(BigDecimal("245.00"))
     }
+
+    @Test
+    fun `UPI VPA paid Rs to handle extracts amount debit merchant and ref`() {
+        val tx = parser.parse(
+            raw("VM-HDFCBK", "Paid Rs.250.00 to user@okicici via UPI Ref 1234567890"),
+        )!!
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("250.00"))
+        assertThat(tx.type).isEqualTo(TransactionType.DEBIT)
+        assertThat(tx.merchant).isEqualTo("user@okicici")
+        assertThat(tx.upiId).isEqualTo("user@okicici")
+        assertThat(tx.paymentMode).isEqualTo(PaymentMode.UPI)
+        assertThat(tx.referenceNumber).isEqualTo("1234567890")
+        assertThat(tx.bank).isEqualTo("HDFC")
+    }
+
+    @Test
+    fun `GPay debit to numeric VPA extracts amount and last-4-free merchant`() {
+        val tx = parser.parse(
+            raw("VM-GPAY", "Debited INR 1,500.00 via GPay to 9876543210@upi"),
+        )!!
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("1500.00"))
+        assertThat(tx.type).isEqualTo(TransactionType.DEBIT)
+        assertThat(tx.merchant).isEqualTo("9876543210@upi")
+        assertThat(tx.upiId).isEqualTo("9876543210@upi")
+        assertThat(tx.paymentMode).isEqualTo(PaymentMode.UPI)
+        assertThat(tx.bank).isEqualTo("Google Pay")
+    }
+
+    @Test
+    fun `reversed wording with Indian grouping extracts debit Swiggy and last4`() {
+        val tx = parser.parse(
+            raw(
+                "VM-HDFCBK",
+                "Your A/C x1234 debited by INR 1,50,000.50 on 12-Aug-26 by Swiggy",
+            ),
+        )!!
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("150000.50"))
+        assertThat(tx.type).isEqualTo(TransactionType.DEBIT)
+        assertThat(tx.merchant).isEqualTo("Swiggy")
+        assertThat(tx.accountLast4).isEqualTo("1234")
+        assertThat(tx.bank).isEqualTo("HDFC")
+        assertThat(tx.category).isEqualTo(Categories.FOOD)
+    }
+
+    @Test
+    fun `INR-first debit at Zomato extracts amount last4 and UPI mode`() {
+        val tx = parser.parse(
+            raw("VM-HDFCBK", "INR 450.00 debited from A/C x5678 at ZOMATO UPI"),
+        )!!
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("450.00"))
+        assertThat(tx.type).isEqualTo(TransactionType.DEBIT)
+        assertThat(tx.merchant).isEqualTo("Zomato")
+        assertThat(tx.accountLast4).isEqualTo("5678")
+        assertThat(tx.paymentMode).isEqualTo(PaymentMode.UPI)
+        assertThat(tx.category).isEqualTo(Categories.FOOD)
+    }
+
+    @Test
+    fun `refund of Rs is Credit Refund and nets against spend`() {
+        val spend = parser.parse(
+            raw("VM-HDFCBK", "Rs 350.00 debited from A/c XX1234 at AMAZON via UPI. UPI Ref 111"),
+        )!!
+        val refund = parser.parse(
+            raw(
+                "VM-HDFCBK",
+                "Refund of Rs.350.00 processed for your transaction at Amazon",
+            ),
+        )!!
+        assertThat(refund.type).isEqualTo(TransactionType.CREDIT)
+        assertThat(refund.category).isEqualTo(Categories.REFUND)
+        assertThat(refund.merchant?.uppercase()).contains("AMAZON")
+        assertThat(refund.amount.amount).isEqualTo(BigDecimal("350.00"))
+        assertThat(LedgerBuckets.spend(listOf(spend, refund)).amount)
+            .isEqualTo(BigDecimal.ZERO.setScale(2))
+        assertThat(LedgerBuckets.isIncome(refund)).isFalse()
+    }
+
+    @Test
+    fun `own-account transfer between two last4s is Self-Transfer excluded from spend`() {
+        val tx = parser.parse(
+            raw(
+                "VM-HDFCBK",
+                "Transferred Rs.5000.00 from A/C x1234 to A/C x5678",
+            ),
+        )!!
+        assertThat(tx.type).isEqualTo(TransactionType.DEBIT)
+        assertThat(tx.amount.amount).isEqualTo(BigDecimal("5000.00"))
+        assertThat(tx.category).isEqualTo(Categories.TRANSFER)
+        assertThat(tx.accountLast4).isEqualTo("1234")
+        assertThat(LedgerBuckets.isSpend(tx)).isFalse()
+        assertThat(LedgerBuckets.spend(listOf(tx)).amount).isEqualTo(BigDecimal.ZERO.setScale(2))
+    }
+
+    @Test
+    fun `OTP login SMS is ignored`() {
+        val body = "123456 is your OTP for login. Do not share with anyone."
+        assertThat(parser.isTransactional(body)).isFalse()
+        assertThat(parser.parse(raw("VM-HDFCBK", body))).isNull()
+    }
+
+    @Test
+    fun `credit card limit increase promo is ignored`() {
+        val body = "Your credit card limit has been increased to Rs. 2,00,000. Apply now."
+        assertThat(parser.isTransactional(body)).isFalse()
+        assertThat(parser.parse(raw("VM-HDFCBK", body))).isNull()
+    }
+
+    @Test
+    fun `electricity bill due reminder is ignored`() {
+        val body = "Reminder: Your electricity bill of Rs. 1200 is due on 20th Aug."
+        assertThat(parser.isTransactional(body)).isFalse()
+        assertThat(parser.parse(raw("VM-HDFCBK", body))).isNull()
+        assertThat(CreditCardStatementParser.parse(raw("VM-HDFCBK", body))).isNull()
+    }
 }
