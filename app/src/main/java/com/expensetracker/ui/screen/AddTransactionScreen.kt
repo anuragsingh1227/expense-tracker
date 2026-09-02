@@ -42,12 +42,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.expensetracker.R
 import com.expensetracker.data.repository.TransactionRepository
+import com.expensetracker.domain.model.HashtagParser
 import com.expensetracker.domain.model.Money
 import com.expensetracker.domain.model.PaymentMode
 import com.expensetracker.domain.model.Transaction
 import com.expensetracker.domain.model.TransactionType
 import com.expensetracker.sms.parser.Categories
+import com.expensetracker.ui.components.AmountVisibilityToggle
+import com.expensetracker.ui.components.DatePickerField
 import com.expensetracker.ui.components.SurfaceCard
+import com.expensetracker.ui.components.TagChipRow
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import java.time.Clock
@@ -61,6 +65,11 @@ class AddTransactionViewModel @Inject constructor(
     private val clock: Clock,
 ) : ViewModel() {
 
+    @Volatile
+    private var saving = false
+
+    fun today(): LocalDate = LocalDate.now(clock)
+
     fun save(
         amountText: String,
         type: TransactionType,
@@ -68,35 +77,45 @@ class AddTransactionViewModel @Inject constructor(
         category: String,
         date: LocalDate,
         notes: String,
+        tags: Collection<String>,
         onDone: () -> Unit,
     ) {
         val amount = runCatching { Money.ofRupees(amountText.trim()) }.getOrNull() ?: return
         if (amount.amount.signum() <= 0) return
+        val who = merchant.trim()
+        if (who.isEmpty()) return
+        if (saving) return
+        saving = true
         val cat = category.trim().ifEmpty { Categories.OTHERS }
         viewModelScope.launch {
-            val zone = clock.zone
-            val tx = Transaction(
-                amount = amount,
-                type = type,
-                merchant = merchant.trim().takeIf { it.isNotEmpty() },
-                category = cat,
-                bank = null,
-                accountLast4 = null,
-                cardLast4 = null,
-                upiId = null,
-                referenceNumber = null,
-                balance = null,
-                paymentMode = PaymentMode.CASH,
-                timestamp = date.atStartOfDay(zone).toInstant(),
-                sender = null,
-                rawSms = null,
-                narration = null,
-                notes = notes.trim().takeIf { it.isNotEmpty() },
-                dedupeHash = "manual-" + UUID.randomUUID(),
-                manuallyEdited = true,
-            )
-            repository.insertManual(tx)
-            onDone()
+            try {
+                val zone = clock.zone
+                val tx = Transaction(
+                    amount = amount,
+                    type = type,
+                    merchant = who,
+                    category = cat,
+                    bank = null,
+                    accountLast4 = null,
+                    cardLast4 = null,
+                    upiId = null,
+                    referenceNumber = null,
+                    balance = null,
+                    paymentMode = PaymentMode.CASH,
+                    timestamp = date.atStartOfDay(zone).toInstant(),
+                    sender = null,
+                    rawSms = null,
+                    narration = null,
+                    notes = notes.trim().takeIf { it.isNotEmpty() },
+                    dedupeHash = "manual-" + UUID.randomUUID(),
+                    manuallyEdited = true,
+                    tags = HashtagParser.merge(notes, tags),
+                )
+                repository.insertManual(tx)
+                onDone()
+            } finally {
+                saving = false
+            }
         }
     }
 }
@@ -105,14 +124,17 @@ class AddTransactionViewModel @Inject constructor(
 @Composable
 fun AddTransactionScreen(
     onBack: () -> Unit,
+    amountsHidden: Boolean = false,
+    onToggleAmountsHidden: () -> Unit = {},
     viewModel: AddTransactionViewModel = hiltViewModel(),
 ) {
     var amountText by remember { mutableStateOf("") }
     var type by remember { mutableStateOf(TransactionType.DEBIT) }
     var merchant by remember { mutableStateOf("") }
     var category by remember { mutableStateOf(Categories.OTHERS) }
-    var dateText by remember { mutableStateOf(LocalDate.now().toString()) }
+    var date by remember { mutableStateOf(viewModel.today()) }
     var notes by remember { mutableStateOf("") }
+    var selectedTags by remember { mutableStateOf(emptySet<String>()) }
 
     val amountValid = remember(amountText) {
         runCatching {
@@ -120,10 +142,8 @@ fun AddTransactionScreen(
             m.amount.signum() > 0
         }.getOrDefault(false)
     }
-    val dateParsed = remember(dateText) {
-        runCatching { LocalDate.parse(dateText.trim()) }.getOrNull()
-    }
-    val canSave = amountValid && dateParsed != null && category.isNotBlank()
+    val merchantValid = merchant.trim().isNotEmpty()
+    val canSave = amountValid && merchantValid && category.isNotBlank()
 
     Scaffold(
         topBar = {
@@ -139,6 +159,12 @@ fun AddTransactionScreen(
                             contentDescription = stringResource(R.string.action_back),
                         )
                     }
+                },
+                actions = {
+                    AmountVisibilityToggle(
+                        amountsHidden = amountsHidden,
+                        onToggle = onToggleAmountsHidden,
+                    )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
@@ -157,14 +183,26 @@ fun AddTransactionScreen(
         ) {
             SurfaceCard {
                 OutlinedTextField(
-                    value = amountText,
-                    onValueChange = { amountText = it.filter { c -> c.isDigit() || c == '.' } },
+                    value = if (amountsHidden) stringResource(R.string.amount_hidden_mask) else amountText,
+                    onValueChange = {
+                        if (!amountsHidden) amountText = it.filter { c -> c.isDigit() || c == '.' }
+                    },
                     label = { Text(stringResource(R.string.label_amount)) },
+                    supportingText = if (amountsHidden) {
+                        { Text(stringResource(R.string.amount_hidden_unmask_hint)) }
+                    } else if (!amountValid && amountText.isNotBlank()) {
+                        { Text(stringResource(R.string.amount_invalid)) }
+                    } else {
+                        null
+                    },
+                    isError = !amountsHidden && !amountValid && amountText.isNotBlank(),
                     singleLine = true,
+                    readOnly = amountsHidden,
+                    enabled = !amountsHidden,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
-                    prefix = { Text("₹") },
+                    prefix = if (amountsHidden) null else ({ Text("₹") }),
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(stringResource(R.string.label_type), style = MaterialTheme.typography.titleSmall)
@@ -188,26 +226,23 @@ fun AddTransactionScreen(
                     value = merchant,
                     onValueChange = { merchant = it },
                     label = { Text(stringResource(R.string.label_merchant)) },
+                    supportingText = { Text(stringResource(R.string.merchant_required)) },
+                    isError = !merchantValid && amountValid,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
                 )
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = dateText,
-                    onValueChange = { dateText = it },
-                    label = { Text(stringResource(R.string.label_date)) },
-                    supportingText = { Text(stringResource(R.string.label_date_hint)) },
-                    singleLine = true,
-                    isError = dateParsed == null && dateText.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                )
+                DatePickerField(date = date, onDateChange = { date = it })
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = notes,
-                    onValueChange = { notes = it },
+                    onValueChange = { value ->
+                        notes = value
+                        selectedTags = HashtagParser.merge(value, selectedTags).toSet()
+                    },
                     label = { Text(stringResource(R.string.label_notes)) },
+                    supportingText = { Text(stringResource(R.string.label_notes_hashtag_hint)) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
                     minLines = 2,
@@ -228,9 +263,14 @@ fun AddTransactionScreen(
                 }
             }
 
+            Text(stringResource(R.string.label_tags), style = MaterialTheme.typography.titleMedium)
+            TagChipRow(
+                selectedTags = selectedTags,
+                onChange = { selectedTags = it },
+            )
+
             Button(
                 onClick = {
-                    val date = dateParsed ?: return@Button
                     viewModel.save(
                         amountText = amountText,
                         type = type,
@@ -238,6 +278,7 @@ fun AddTransactionScreen(
                         category = category,
                         date = date,
                         notes = notes,
+                        tags = selectedTags,
                         onDone = onBack,
                     )
                 },

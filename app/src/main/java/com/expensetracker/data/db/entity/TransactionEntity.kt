@@ -35,4 +35,7 @@ data class TransactionEntity(
     val notes: String?,
     val dedupeHash: String,
     val manuallyEdited: Boolean = false,
+    val tagsJson: String? = null,
+    val isSplit: Boolean = false,
+    val splitJson: String? = null,
 )

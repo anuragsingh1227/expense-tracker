@@ -13,9 +13,17 @@ import java.util.Locale
  */
 object SmsDateExtractor {
 
-    /** `on 05-02-19` / `on 05/08/2026` / `dated 12-01-24 07:27:11` */
+    /** `on 05-02-19` / `on 05/08/2026` / `dated 12-01-24 07:27:11` / `on 01-09-26 at 07:32:18` */
     private val NUMERIC = Regex(
-        """(?i)\b(?:on|dated)\s+(\d{1,2})[./\-](\d{1,2})[./\-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?""",
+        """(?i)\b(?:on|dated)\s+(\d{1,2})[./\-](\d{1,2})[./\-](\d{2,4})(?:\s+(?:at\s+)?(\d{1,2}):(\d{2})(?::(\d{2}))?)?""",
+    )
+
+    /**
+     * Axis compact lines with no `on`/`dated`: `28-08-26 18:34:34 IST` /
+     * `28-08-26, 09:23:39`.
+     */
+    private val BARE_NUMERIC = Regex(
+        """(?i)\b(\d{1,2})[./\-](\d{1,2})[./\-](\d{2,4})(?:[,\s]+(?:at\s+)?(\d{1,2}):(\d{2})(?::(\d{2}))?)?""",
     )
 
     /** `on 23-Jul-2026` / `on 05/Aug/2026` / `on 15-APR` (year optional) */
@@ -26,6 +34,14 @@ object SmsDateExtractor {
     /** `on August 05, 2026` / `on July 23, 2026 at 14:15` */
     private val MONTH_FIRST = Regex(
         """(?i)\b(?:on|dated)\s+([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{2,4})(?:\s+(?:at\s+)?(\d{1,2}):(\d{2})(?::(\d{2}))?)?""",
+    )
+
+    /**
+     * Axis compact multi-line template puts the stamp on its own line without "on":
+     * `15-06-26 20:43:26` or `04-08-26, 07:32:27 IST`
+     */
+    private val BARE_NUMERIC_WITH_TIME = Regex(
+        """(?i)(?<![\d])(\d{1,2})[./\-](\d{1,2})[./\-](\d{2,4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*IST\b)?""",
     )
 
     fun extract(body: String, zone: ZoneId, fallback: Instant): Instant {
@@ -53,6 +69,20 @@ object SmsDateExtractor {
             val month = monthNumber(m.groupValues[2]) ?: return@let
             val yearToken = m.groupValues.getOrNull(3).orEmpty()
             val year = if (yearToken.isBlank()) fallbackYear else normalizeYear(yearToken.toInt())
+            val time = parseTime(m.groupValues.getOrNull(4), m.groupValues.getOrNull(5), m.groupValues.getOrNull(6))
+            toInstant(year, month, day, time, zone)?.let { return it }
+        }
+        BARE_NUMERIC_WITH_TIME.find(body)?.let { m ->
+            val day = m.groupValues[1].toInt()
+            val month = m.groupValues[2].toInt()
+            val year = normalizeYear(m.groupValues[3].toInt())
+            val time = parseTime(m.groupValues[4], m.groupValues[5], m.groupValues.getOrNull(6))
+            toInstant(year, month, day, time, zone)?.let { return it }
+        }
+        BARE_NUMERIC.find(body)?.let { m ->
+            val day = m.groupValues[1].toInt()
+            val month = m.groupValues[2].toInt()
+            val year = normalizeYear(m.groupValues[3].toInt())
             val time = parseTime(m.groupValues.getOrNull(4), m.groupValues.getOrNull(5), m.groupValues.getOrNull(6))
             toInstant(year, month, day, time, zone)?.let { return it }
         }

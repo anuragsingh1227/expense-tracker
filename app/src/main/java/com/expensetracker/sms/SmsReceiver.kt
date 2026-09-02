@@ -21,6 +21,7 @@ class SmsReceiver : BroadcastReceiver() {
     @Inject lateinit var parser: SmsParser
     @Inject lateinit var repository: TransactionRepository
     @Inject lateinit var notifier: TransactionNotifier
+    @Inject lateinit var cardStatements: CardStatementIngestor
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -38,6 +39,7 @@ class SmsReceiver : BroadcastReceiver() {
                     val body = parts.joinToString("") { it.messageBody.orEmpty() }
                     val timestampMs = parts.firstOrNull()?.timestampMillis ?: System.currentTimeMillis()
                     val raw = RawSms(sender.takeIf { it.isNotBlank() }, body, Instant.ofEpochMilli(timestampMs))
+                    if (cardStatements.ingest(raw) != null) return@forEach
                     if (!parser.isTransactional(body)) return@forEach
                     val tx = parser.parse(raw) ?: return@forEach
                     val inserted = repository.insertIfNew(tx)

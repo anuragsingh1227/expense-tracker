@@ -18,6 +18,11 @@ object MerchantDictionary {
         Entry("BIG BASKET", "BigBasket", Categories.GROCERIES),
         Entry("DMART", "DMart", Categories.GROCERIES),
         Entry("D-MART", "DMart", Categories.GROCERIES),
+        Entry("AVENUE SUPERMAR", "Avenue Supermarts", Categories.GROCERIES),
+        Entry("AVENUE SUPERMART", "Avenue Supermarts", Categories.GROCERIES),
+        Entry("FRESHTOH", "FreshtoHome", Categories.GROCERIES),
+        Entry("FRESHTOHOME", "FreshtoHome", Categories.GROCERIES),
+        Entry("COUNTRY DELIGHT", "Country Delight", Categories.GROCERIES),
         Entry("JIOMART", "JioMart", Categories.GROCERIES),
         Entry("JIO MONEY", "JioMoney", Categories.RECHARGE),
         Entry("BD JIO MONEY", "JioMoney", Categories.RECHARGE),
@@ -37,6 +42,12 @@ object MerchantDictionary {
         Entry("KFC", "KFC", Categories.FOOD),
         Entry("STARBUCKS", "Starbucks", Categories.FOOD),
         Entry("BURGER KING", "Burger King", Categories.FOOD),
+        Entry("ABCOFFEE", "abCoffee", Categories.FOOD),
+        Entry("AB COFFEE", "abCoffee", Categories.FOOD),
+        Entry("MITHAAS", "Mithaas", Categories.FOOD),
+        Entry("WHISKEY JUNCTIO", "Whiskey Junction", Categories.FOOD),
+        Entry("WHISKEY JUNCTION", "Whiskey Junction", Categories.FOOD),
+        Entry("CASA DON", "Casa Don", Categories.FOOD),
 
         // Investments / brokers / MF
         Entry("GROWW", "Groww", Categories.INVESTMENT),
@@ -50,6 +61,11 @@ object MerchantDictionary {
         Entry("PAYTM MONEY", "Paytm Money", Categories.INVESTMENT),
         Entry("ETMONEY", "ET Money", Categories.INVESTMENT),
         Entry("ET MONEY", "ET Money", Categories.INVESTMENT),
+        Entry("SCRIPBOX", "Scripbox", Categories.INVESTMENT),
+        Entry("MOTILALOSWAL", "Motilal Oswal", Categories.INVESTMENT),
+        Entry("MOTILAL OSWAL", "Motilal Oswal", Categories.INVESTMENT),
+        Entry("IPRUMF", "ICICI Prudential MF", Categories.INVESTMENT),
+        Entry("ICICI PRUDENTIAL", "ICICI Prudential MF", Categories.INVESTMENT),
         Entry("SMALLCASE", "smallcase", Categories.INVESTMENT),
         Entry("INDIANCLEARING", "NSE/BSE", Categories.INVESTMENT),
         Entry("NSCCL", "NSE Clearing", Categories.INVESTMENT),
@@ -58,6 +74,7 @@ object MerchantDictionary {
         Entry("MUTUAL FUND", "Mutual Fund", Categories.INVESTMENT),
         Entry("FOR SIP", "SIP", Categories.INVESTMENT),
         Entry("SIP OF", "SIP", Categories.INVESTMENT),
+        Entry("SIP PURCHASE", "SIP", Categories.INVESTMENT),
 
         // Shopping
         Entry("AMAZON", "Amazon", Categories.SHOPPING),
@@ -74,6 +91,7 @@ object MerchantDictionary {
         Entry("SNAPDEAL", "Snapdeal", Categories.SHOPPING),
         Entry("DECATHLON", "Decathlon", Categories.SHOPPING),
         Entry("IKEA", "IKEA", Categories.SHOPPING),
+        Entry("WAKEFIT", "Wakefit", Categories.SHOPPING),
 
         // Transport / cabs
         Entry("UBER", "Uber", Categories.TRANSPORT),
@@ -107,6 +125,9 @@ object MerchantDictionary {
         Entry("YOUTUBE PREMIUM", "YouTube Premium", Categories.SUBSCRIPTION),
         Entry("SONYLIV", "SonyLIV", Categories.SUBSCRIPTION),
         Entry("JIO CINEMA", "JioCinema", Categories.SUBSCRIPTION),
+        Entry("GOOGLE PLAY", "Google Play", Categories.SUBSCRIPTION),
+        Entry("OPENAI", "OpenAI", Categories.SUBSCRIPTION),
+        Entry("CHATGPT", "OpenAI", Categories.SUBSCRIPTION),
         Entry("BOOKMYSHOW", "BookMyShow", Categories.ENTERTAINMENT),
         Entry("PVR", "PVR", Categories.ENTERTAINMENT),
         Entry("INOX", "INOX", Categories.ENTERTAINMENT),
@@ -122,6 +143,10 @@ object MerchantDictionary {
         Entry("ADANI ELECTRICITY", "Adani Electricity", Categories.UTILITIES),
         Entry("INDIAN OIL GAS", "Indane Gas", Categories.UTILITIES),
         Entry("BHARAT GAS", "Bharat Gas", Categories.UTILITIES),
+        Entry("IGL", "IGL Gas", Categories.UTILITIES),
+        Entry("IOAGPL", "IOAGPL Gas", Categories.UTILITIES),
+        Entry("U P POWER", "UP Power Corp", Categories.UTILITIES),
+        Entry("UPPCL", "UP Power Corp", Categories.UTILITIES),
 
         // Medical
         Entry("APOLLO", "Apollo Pharmacy", Categories.MEDICAL),

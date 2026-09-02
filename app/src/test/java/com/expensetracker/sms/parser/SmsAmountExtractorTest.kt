@@ -40,4 +40,10 @@ class SmsAmountExtractorTest {
         assertThat(SmsAmountExtractor.extract(SampleSms.AXIS_CARD)!!.amount)
             .isEqualTo(BigDecimal("1299.00"))
     }
+
+    @Test
+    fun `ICICI spent-using amount is 2500 not Avl Limit`() {
+        assertThat(SmsAmountExtractor.extract(SampleSms.ICICI_CARD_SPENT_USING)!!.amount)
+            .isEqualTo(BigDecimal("2500.00"))
+    }
 }
